@@ -30,8 +30,8 @@ int main () {
   unsigned int sigLength, numSigs;
   unsigned int ptrIndex = 0;
   unsigned int *xx_M = NULL;
-  //  char filename[] ="~/Projects/CodedAPSK/matlabDecoder/Data/Signals/sig_2.5.mat";
-  char filename[] ="~/APSK/Data/Signals/sig_2.5.mat";
+  //  char filename[] ="~/Projects/CodedAPSK/SparseMatrix2D/SampleData/sig_2.5.mat";
+  char filename[] ="~/APSK/GPUtests/SparseMatrix2D/SampleData/sig_2.5.mat";
 
   pmat = matOpen(filename, "r");
   if (pmat == NULL) {
