@@ -4,12 +4,31 @@ For a single packet (first from 2.5 SNR), 11 iterations to complete
 
 Total Time     : 3661 microsec
 node processing: 2222 microsec (60%)
-bit esimates   : 441 microsec (12%)
+bit estimates  : 441 microsec (12%)
 transpose      : 919 microsec (25%)
 
 For 1000 packets:
 =================
  3712 msec for 1000 packets.
  1000 Successes out of 1000 packets.
+ 11274 cumulative iterations, or about 11.3 per packet.
+Number of iterations for the first few packets:   11 11 11 12 10 10 10 10 11 11
+
+                        ==================================
+
+Direct C to GPU Solution: (on tesla)
+==================================
+For a single packet (first from 2.5 SNR), 11 iterations to complete
+
+Total Time      : 2760.8 microsec
+node processing : 220.9 microsec (8.00%)
+bit estimates   : 113.8 microsec (4.12%)
+transpose       : 724.4 microsec (26.24%)
+Other???        : 1701.7 microsec (61.64%)
+
+For 1000 packets:
+=================
+2475.005859 msec to decode 1000 packets.
+ 1000 Successes out of 1000 inputs.
  11274 cumulative iterations, or about 11.3 per packet.
 Number of iterations for the first few packets:   11 11 11 12 10 10 10 10 11 11
