@@ -1,4 +1,5 @@
-#define INTERNAL_TIMINGS_4_DECODER ON
+// #define INTERNAL_TIMINGS_4_DECODER ON
+
 // Based on the Eric's C-code implementation of ldpc decode.
 //
 #include <math.h>
@@ -15,41 +16,37 @@
 #define NTHREADS    128
 
 __global__ void
-checkNodeProcessingC (
-                      // numChecks and bitsForCheck are constant for program lifecycle.
-                      unsigned int numChecks, unsigned int *bitsForCheck,
-                      unsigned int maxBitsForCheck,
-                      // lambdaByCheckIndex is IN only (but changes on each invocation).
-                      float *lambdaByCheckIndex,
+checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
                       // eta is IN and OUT
-                      float *eta) {
-  unsigned checkIndex;
+                      float *lambdaByCheckIndex, float *eta) {
   // edk  HACK !!!
   // This was signs[maxBitsForCheck], which generates the error:
   // error: constant value is not known.
   // Since we are in a kernel function, we probably need a compile-time constant.
   // 128 should be much larger than maxBitsForCheck for any reasonable LDPC encoding.
-  int signs[128];
+  unsigned int signs[128];
   unsigned int signProduct;
   float value, min1, min2;
   unsigned int minIndex;
 
   // index
-  int m;
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int m;
+  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int thisRowLength, thisRowStart, currentIndex;
 
   if (tid < numChecks) {
     m = tid;
-    checkIndex = tid * maxBitsForCheck;
-    // signs[n]  == 0  ==>  positive
-    //           == 1  ==>  negative
-    memset(signs, 0, maxBitsForCheck*sizeof(signs[0]));
+    thisRowStart = m * (maxBitsForCheck+1);
+    // signs[n]  == 0  ==>  positive; 1  ==>  negative
+    memset(signs, 0, (maxBitsForCheck+1)*sizeof(signs[0]));
     signProduct = 0;
     min1 = MAX_ETA;
     min2 =  MAX_ETA;
-    minIndex = 0;
-    for (unsigned int n=0; n<bitsForCheck[m]; n++) {
-      value = eta[checkIndex+n] - lambdaByCheckIndex[checkIndex+n];
+    minIndex = 1;
+    thisRowLength = eta[thisRowStart];
+    for (unsigned int n=1; n<= thisRowLength ; n++) {
+      currentIndex = thisRowStart+n;
+      value = eta[currentIndex] - lambdaByCheckIndex[currentIndex];
       signs[n] = (value < 0)? 1 : 0;
       signProduct = (signProduct != signs[n])? 1 : 0;
       value = ABS(value);
@@ -63,97 +60,107 @@ checkNodeProcessingC (
     }
     min1 = min1 * SCALE_FACTOR * (-1);
     min2 = min2 * SCALE_FACTOR * (-1);
-    for (unsigned int n=0; n<bitsForCheck[m]; n++) {
-      eta[checkIndex+n] =  (n == minIndex) ? min2 : min1;
-      if (signs[n] != signProduct) {eta[checkIndex+n] = -eta[checkIndex+n];}
+    for (unsigned int n=1; n<= thisRowLength; n++) {
+      currentIndex = thisRowStart+n;
+      eta[currentIndex] =  (n == minIndex) ? min2 : min1;
+      if (signs[n] != signProduct) {eta[currentIndex] = -eta[currentIndex];}
     }
   }
 }
 
 __global__ void
-bitEstimatesC(float *rSig, unsigned int *checksForBit,
-              // etaByBitIndex is IN only (but changes on each invocation).
-              float *etaByBitIndex,
-              // lambda and decision are OUT only
-              float *lambda, int *decision,
-              unsigned int numBits, unsigned int maxChecksForBit) {
-  // index
-  int n;
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
+             unsigned int numBits, unsigned int maxChecksForBit) {
+
+  unsigned int n;
+  unsigned int thisRowLength, thisRowStart;
+  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
   if (tid < numBits) {
     n = tid;
     float sum = rSig[n];
-    for (unsigned int m=0; m<checksForBit[n]; m++) {
-      sum = sum + etaByBitIndex[tid*maxChecksForBit +m];
+    thisRowStart = n*(maxChecksForBit+1);
+    thisRowLength = etaByBitIndex[thisRowStart];
+    for (unsigned int m=1; m<=thisRowLength; m++) {
+      sum = sum + etaByBitIndex[thisRowStart +m];
     }
     lambda[n] = sum;
-    decision[n] = (sum >= 0) ? 1 : 0;
   }
 }
 
 int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
-                 unsigned int *bitsForCheck, unsigned int *checksForBit,
-                 int maxBitsForCheck, int maxChecksForBit,
+                 unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
                  unsigned int *mapRows2Cols,
                  unsigned int *mapCols2Rows,
                  unsigned int maxIterations,
-                 int *decision) {
+                 unsigned int *decision,
+                 float *estimates) {
 
-  unsigned int nChecksByBits = numChecks*maxBitsForCheck;
-  unsigned int nBitsByChecks = numBits*maxChecksForBit;
+  unsigned int nChecksByBits = numChecks*(maxBitsForCheck+1);
+  unsigned int nBitsByChecks = numBits*(maxChecksForBit+1);
 
   float eta[nChecksByBits];
   float lambda[numBits];
   float etaByBitIndex[nBitsByChecks];
   float lambdaByCheckIndex[nChecksByBits];
-  int cHat [nChecksByBits];
+  unsigned int cHat [nChecksByBits];
 
   unsigned int iterCounter;
   bool allChecksPassed = false;
 
   unsigned int oneDindex;
-  unsigned int bitIndex = 0;
-  unsigned int checkIndex = 0;
+  unsigned int rowStart;
+  unsigned int rowLength;
 
   float *dev_rSig;
   float *dev_eta;
   float *dev_lambda;
   float *dev_etaByBitIndex;
   float *dev_lambdaByCheckIndex;
-  unsigned int *dev_bitsForCheck;
-  unsigned int *dev_checksForBit;
-  int *dev_decision;
 
   HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_bitsForCheck, numChecks * sizeof(unsigned int) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_checksForBit, numBits * sizeof(unsigned int) ) );
-
   HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(float) ) );
   HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(float) ) );
   HANDLE_ERROR( cudaMalloc( (void**)&dev_etaByBitIndex,  nBitsByChecks * sizeof(float) ) );
   HANDLE_ERROR( cudaMalloc( (void**)&dev_lambdaByCheckIndex, nChecksByBits * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_decision, numBits * sizeof(unsigned int) ) );
   //  HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(unsigned int) ) );
 
   memcpy(lambda, rSig, numBits*sizeof(lambda[0]));
-  memset(eta, 0, numChecks*maxBitsForCheck*sizeof(eta[0]));
+  memset(eta, 0, nChecksByBits*sizeof(eta[0]));
+  memset(lambdaByCheckIndex, 0, nChecksByBits*sizeof(eta[0]));
+
+  // Need to insert rowLengths into eta (and lambdaByCheckIndex)
+  // with rows corresponding to parity checks.
+  rowStart = 0;
+  for (unsigned int check=0; check<numChecks; check++) {
+    rowLength = mapRows2Cols[rowStart];
+    eta[rowStart] = (float)rowLength;
+    lambdaByCheckIndex[rowStart] = (float)rowLength;
+    cHat[rowStart] = rowLength;
+    rowStart = rowStart + (maxBitsForCheck+1);
+  }
+
+  // Need to insert rowLengths into etaByBitIndex
+  rowStart = 0;
+  for (unsigned int bit=0; bit<numBits; bit++) {
+    etaByBitIndex[rowStart] = (float)mapCols2Rows[rowStart];
+    rowStart = rowStart + (maxChecksForBit+1);
+  }
 
   // initialization
   // Build a matrix in which every row represents a check
   // and the elements, are the estimates for the bits contributing to this check.
 
+  rowStart = 0;
   for (unsigned int bit=0; bit<numBits; bit++) {
-    for (unsigned int index=0; index<checksForBit[bit]; index++) {
-      oneDindex  = mapCols2Rows[bitIndex +index];
+    for (unsigned int index=1; index<=mapCols2Rows[rowStart]; index++) {
+      oneDindex  = mapCols2Rows[rowStart +index];
       lambdaByCheckIndex[oneDindex] = lambda[bit];
     }
-    bitIndex = bitIndex + maxChecksForBit;
+    rowStart = rowStart + (maxChecksForBit+1);
   }
 
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_bitsForCheck, bitsForCheck, numChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_checksForBit, checksForBit, numBits  * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
   float elapsedTime, partTimes;
@@ -176,12 +183,11 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
     HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
 
-
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
     // checkNode Processing  (1536)
-    checkNodeProcessingC<<< (1535+NTHREADS)/NTHREADS,NTHREADS>>>(numChecks, dev_bitsForCheck, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    checkNodeProcessing<<< (1535+NTHREADS)/NTHREADS,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
     cudaDeviceSynchronize();
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
@@ -195,15 +201,16 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // Transpose  eta with rows == checkIndex, to rows == bitIndex
-    checkIndex = 0;
+    // Transpose  eta with rows == parity checks, to rows == bits
+    rowStart = 0;
     for (unsigned int check=0; check<numChecks; check++) {
-      for (unsigned int index=0; index<bitsForCheck[check]; index++) {
-        oneDindex = mapRows2Cols[checkIndex + index];
-        etaByBitIndex[oneDindex] = eta[checkIndex + index];
+      for (unsigned int index=1; index<= mapRows2Cols[rowStart]; index++) {
+        oneDindex = mapRows2Cols[rowStart + index];
+        etaByBitIndex[oneDindex] = eta[rowStart + index];
       }
-      checkIndex = checkIndex + maxBitsForCheck;
+      rowStart = rowStart + (maxBitsForCheck+1);
     }
+
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
     HANDLE_ERROR( cudaEventSynchronize(stopAt));
@@ -216,7 +223,7 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    bitEstimatesC<<<(2560+NTHREADS)/NTHREADS,NTHREADS>>>(dev_rSig, dev_checksForBit, dev_etaByBitIndex, dev_lambda, dev_decision, numBits,maxChecksForBit);
+    bitEstimates<<<(2560+NTHREADS)/NTHREADS,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
     cudaDeviceSynchronize();
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -225,20 +232,21 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     bitEstimateTime = bitEstimateTime + elapsedTime;
 #endif
     HANDLE_ERROR(cudaMemcpy(lambda, dev_lambda, numBits * sizeof(float), cudaMemcpyDeviceToHost));
-    HANDLE_ERROR(cudaMemcpy(decision, dev_decision, numBits * sizeof(unsigned int), cudaMemcpyDeviceToHost));
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // Transpose  lambda with rows == bitIndex, to rows == checkIndex
-    bitIndex = 0;
+    // Transpose  lambda with rows == bits, to rows == parity checks
+    rowStart = 0;
     for (unsigned int n=0; n<numBits; n++) {
-      for (unsigned int index=0; index<checksForBit[n]; index++) {
-        oneDindex  = mapCols2Rows[bitIndex + index];
+      decision[n] = (lambda[n] >= 0) ? 1 : 0;
+      estimates[n] = lambda[n];
+      for (unsigned int index=1; index<=mapCols2Rows[rowStart]; index++) {
+        oneDindex  = mapCols2Rows[rowStart + index];
         lambdaByCheckIndex[oneDindex] = lambda[n];
         cHat[oneDindex] = decision[n];
       }
-      bitIndex = bitIndex + maxChecksForBit;
+      rowStart = rowStart + (maxChecksForBit+1);
     }
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -248,16 +256,16 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #endif
 
     // Check for correct decoding.
-    checkIndex = 0;
+    rowStart = 0;
     allChecksPassed = true;
     for (unsigned int check=0; check<numChecks; check++) {
-      int sum = 0;
-      for (unsigned int index=0; index<bitsForCheck[check]; index++) {sum = sum + cHat[checkIndex + index];}
+      unsigned int sum = 0;
+      for (unsigned int index=1; index<= cHat[rowStart]; index++) {sum = sum + cHat[rowStart + index];}
       if ((sum % 2) != 0 ) {
         allChecksPassed = false;
         break;
       }
-      checkIndex = checkIndex + maxBitsForCheck;
+      rowStart = rowStart + maxBitsForCheck+1;
     }
     if (allChecksPassed) {
       break;}

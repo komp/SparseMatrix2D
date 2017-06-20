@@ -1,6 +1,8 @@
 #include <math.h>
 #include <string.h>
 
+#define ABS(a)  (((a) < (0)) ? (-(a)) : (a))
+
 #include "mat.h"
 #include "matrix.h"
 
@@ -9,36 +11,27 @@
 #define MAXITERATIONS  200
 
 int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
-                 unsigned int *bitsForCheck, unsigned int *checksForBit,
-                 int maxBitsForCheck, int maxChecksForBit,
+                 unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
                  unsigned int *mapRows2Cols, unsigned int *mapCols2Rows,
                  unsigned int maxIterations,
-                 int *decision);
+                 unsigned int *decision,
+                 float *estimates);
 
 int main () {
   MATFile *pmat;
-  mxArray *p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8;
+  mxArray *p3, *p4, *p5, *p6, *p7, *p8;
   unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit, infoLength;
-  unsigned int *bitsForCheck, *checksForBit;
   unsigned int  *mapRows2Cols, *mapCols2Rows;
   double *receivedSigs;
   unsigned int sigLength, numSigs;
-  //  char filename[] ="~/Projects/CodedAPSK/matlabDecoder/Data/Signals/sig_2.5.mat";
-  char filename[] ="~/APSK/Data/Signals/sig_2.5_short.mat";
+  //  char filename[] ="~/Projects/CodedAPSK/matlabDecoder/Data/Signals/sig_2.5_new.mat";
+  char filename[] ="~/APSK/GPUtests/SparseMatrix2D/SampleData/sig_2.5_new.mat";
 
   pmat = matOpen(filename, "r");
   if (pmat == NULL) {
     printf("Error opening file %s\n", filename);
     return(EXIT_FAILURE);
   }
-
-  p1 = matGetVariable(pmat, "bitsForCheck");
-  bitsForCheck = (unsigned int *)mxGetData(p1);
-  numChecks = (unsigned int)mxGetM(p1);
-
-  p2 = matGetVariable(pmat, "checksForBit");
-  checksForBit = (unsigned int *)mxGetData(p2);
-  numBits = (unsigned int)mxGetM(p2);
 
   p3 = matGetVariable(pmat, "maxBitsForCheck");
   maxBitsForCheck = (unsigned int)mxGetScalar(p3);
@@ -49,11 +42,13 @@ int main () {
   p5 = matGetVariable(pmat, "infoLength");
   infoLength = (unsigned int)mxGetScalar(p5);
 
-  p6 = matGetVariable(pmat, "mapRows2Cols");
-  mapRows2Cols  = (unsigned int *)mxGetData(p6);
+  p6 = matGetVariable(pmat, "mapCols2Rows");
+  mapCols2Rows  = (unsigned int *)mxGetData(p6);
+  numBits = (unsigned int)mxGetN(p6);
 
-  p7 = matGetVariable(pmat, "mapCols2Rows");
-  mapCols2Rows  = (unsigned int *)mxGetData(p7);
+  p7 = matGetVariable(pmat, "mapRows2Cols");
+  mapRows2Cols  = (unsigned int *)mxGetData(p7);
+  numChecks = (unsigned int)mxGetN(p7);
 
   p8 = matGetVariable(pmat, "receivedSigs");
   receivedSigs = mxGetPr(p8);
@@ -61,16 +56,21 @@ int main () {
   numSigs = mxGetN(p8);
 
   matClose(pmat);
+
+  printf("parameters have been read.\n");
+  printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
+  printf("%i %i %i %i %i\n", maxChecksForBit, maxBitsForCheck, infoLength, sigLength, numSigs);
   // ///////////////////////////////////////////
 
-  int decision[sigLength];
-  int niters[sigLength];
+  unsigned int decision[sigLength];
+  unsigned int niters[sigLength];
+  float estimates[sigLength];
   float rSig[sigLength];
   unsigned int sigStartIndex;
 
-  int successes = 0;
-  int iterationSum = 0;
-  int numreps = 1;
+  unsigned int successes = 0;
+  unsigned int iterationSum = 0;
+  unsigned int numreps = 1;
 
   // Allocate CUDA events that we'll use for timing
   cudaEvent_t start;
@@ -79,12 +79,13 @@ int main () {
   HANDLE_ERROR(cudaEventCreate(&stop));
   HANDLE_ERROR(cudaEventRecord(start, NULL));
 
-  for (int reps = 0; reps < numreps; reps++) {
+  for (unsigned int reps = 0; reps < numreps; reps++) {
     for (unsigned int i=0; i<numSigs; i++) {
       sigStartIndex = i * sigLength;
       for (unsigned int j=0; j<sigLength; j++) {rSig[j] =  (float)receivedSigs[sigStartIndex+j];   }
-      niters[i] = ldpcDecoder(rSig, numChecks, numBits, bitsForCheck, checksForBit,
-                              maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS, decision);
+      niters[i] = ldpcDecoder(rSig, numChecks, numBits,
+                              maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS,
+                              decision, estimates);
       if (niters[i] < MAXITERATIONS) {successes++;}
       iterationSum = iterationSum + niters[i];  }
   }
@@ -99,6 +100,6 @@ int main () {
   printf(" %i Successes out of %i inputs.\n", successes, numSigs);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)numSigs);
   printf("Number of iterations for the first few packets:  ");
-  for (int i=0; i<10; i++) {printf(" %i", niters[i]);}
+  for (unsigned int i=0; i<10; i++) {printf(" %i", niters[i]);}
   printf ("\n");
 }

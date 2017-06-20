@@ -46,5 +46,10 @@ RunDecoder: Decoder.o RunDecoder.o
 run: build
 	./RunDecoder
 
+TestMaps.o: TestMaps.cu
+	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
+TestMaps: TestMaps.o
+	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
+
 clean:
 	rm -f RunDecoder RunDecoder.o Decoder.o
