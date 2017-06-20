@@ -13,12 +13,7 @@ $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_
 
 # internal flags
 CCFLAGS     :=
-LDFLAGS     :=  -Wl,-rpath=/tools/matlab2016a/bin/glnxa64
-# required to read matlab-generated input file
-# note:  also requires an old version (2016a)
-#        for std-c library compatibility.
-INCLUDES  := -I/tools/matlab2016a/extern/include/
-LIBRARIES := -L/tools/matlab2016a/bin/glnxa64  -lmx -lmex -lmat
+LDFLAGS     :=
 
 NVCC_FLAGS   := -m64 -Wno-deprecated-gpu-targets $(GENCODE_FLAGS)
 NVCC_INCLUDES := -I$(CUDA_PATH)/samples/common/inc
