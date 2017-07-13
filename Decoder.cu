@@ -4,6 +4,7 @@
 //
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include <time.h>
 
 #include "GPUincludes.h"
@@ -13,13 +14,13 @@
 #define MAX_ETA                1e6
 #define SCALE_FACTOR           0.75
 
-#define NTHREADS    128
+#define NTHREADS    32
 
 __global__ void
 checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
                       // eta is IN and OUT
                       float *lambdaByCheckIndex, float *eta) {
-  // edk  HACK !!!
+  // edk  HACK
   // This was signs[maxBitsForCheck], which generates the error:
   // error: constant value is not known.
   // Since we are in a kernel function, we probably need a compile-time constant.
@@ -88,6 +89,51 @@ bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
   }
 }
 
+// Transpose  checkRows matrix with rows == parity checks, to
+//            bitRows matrix  with rows == bits
+__global__ void
+transposeRC (unsigned int* map, float *checkRows, float *bitRows,
+             unsigned int numChecks, unsigned int maxBitsForCheck) {
+  // index
+  unsigned int check = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int rowStart;
+  unsigned int cellIndex, oneDindex;
+
+  if (check < numChecks) {
+    rowStart = check * (maxBitsForCheck+1);
+    for (unsigned int index=1; index<= map[rowStart]; index++) {
+      cellIndex = rowStart + index;
+      oneDindex = map[cellIndex];
+      bitRows[oneDindex] = checkRows[cellIndex];
+    }
+  }
+}
+
+// copyBitsToCheckmatrix accepts a vector of the current bitEstimates
+// and copies them into a checkRow matrix, where each row represents a check.
+// It also generates a HardDecision copy of that output matrix checkRows.
+__global__ void
+copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
+                       unsigned int *hd,
+                       unsigned int numBits, unsigned int maxChecksForBit) {
+  // index
+  unsigned int bitIndex = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int rowStart = 0;
+  unsigned int cellIndex, oneDindex;
+  float thisBitEstimate;
+
+  if (bitIndex < numBits) {
+    rowStart = bitIndex * (maxChecksForBit+1);
+    thisBitEstimate = bitEstimates[bitIndex];
+    for (unsigned int index=1; index<= map[rowStart]; index++) {
+      cellIndex = rowStart + index;
+      oneDindex = map[cellIndex];
+      checkRows[oneDindex] = thisBitEstimate;
+      hd[oneDindex] = (thisBitEstimate >= 0) ? 1 : 0;
+    }
+  }
+}
+
 int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
                  unsigned int *mapRows2Cols,
@@ -96,7 +142,9 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int *decision,
                  float *estimates) {
 
+  // Number of elements in a checkRows matrix (matrix with rowNum = CheckIndex)
   unsigned int nChecksByBits = numChecks*(maxBitsForCheck+1);
+  // Number of elements in a bitRows matrix (matrix with rowNum = BitIndex)
   unsigned int nBitsByChecks = numBits*(maxChecksForBit+1);
 
   float eta[nChecksByBits];
@@ -117,17 +165,24 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   float *dev_lambda;
   float *dev_etaByBitIndex;
   float *dev_lambdaByCheckIndex;
+  unsigned int *dev_cHat;
 
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_etaByBitIndex,  nBitsByChecks * sizeof(float) ) );
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambdaByCheckIndex, nChecksByBits * sizeof(float) ) );
-  //  HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(unsigned int) ) );
+  unsigned int *dev_mapRC;
+  unsigned int *dev_mapCR;
+
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(float) ));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(float)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(float)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_etaByBitIndex,  nBitsByChecks * sizeof(float)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambdaByCheckIndex, nChecksByBits * sizeof(float)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_mapRC, nChecksByBits * sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_mapCR, nBitsByChecks * sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(unsigned int)));
 
   memcpy(lambda, rSig, numBits*sizeof(lambda[0]));
   memset(eta, 0, nChecksByBits*sizeof(eta[0]));
-  memset(lambdaByCheckIndex, 0, nChecksByBits*sizeof(eta[0]));
+  memset(etaByBitIndex, 0, nBitsByChecks*sizeof(etaByBitIndex[0]));
+  memset(lambdaByCheckIndex, 0, nChecksByBits*sizeof(lambdaByCheckIndex[0]));
 
   // Need to insert rowLengths into eta (and lambdaByCheckIndex)
   // with rows corresponding to parity checks.
@@ -161,6 +216,10 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   }
 
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_mapRC, mapRows2Cols, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
   float elapsedTime, partTimes;
@@ -178,16 +237,16 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   // Main iteration loop
   ////////////////////////////////////////////////////////////////////////////
 
-  for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
+  HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
 
-    HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
-    HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
+  for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
     // checkNode Processing  (1536)
-    checkNodeProcessing<<< (1535+NTHREADS)/NTHREADS,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    checkNodeProcessing<<< (1536)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
     cudaDeviceSynchronize();
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
@@ -196,20 +255,12 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
     nodeProcessingTime = nodeProcessingTime + elapsedTime;
 #endif
-    HANDLE_ERROR(cudaMemcpy(eta, dev_eta, nChecksByBits * sizeof(float), cudaMemcpyDeviceToHost));
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // Transpose  eta with rows == parity checks, to rows == bits
-    rowStart = 0;
-    for (unsigned int check=0; check<numChecks; check++) {
-      for (unsigned int index=1; index<= mapRows2Cols[rowStart]; index++) {
-        oneDindex = mapRows2Cols[rowStart + index];
-        etaByBitIndex[oneDindex] = eta[rowStart + index];
-      }
-      rowStart = rowStart + (maxBitsForCheck+1);
-    }
+    transposeRC<<<(1536)/NTHREADS+1,NTHREADS>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
+    cudaDeviceSynchronize();
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -219,11 +270,10 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #endif
 
     // bit estimates update
-    HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    bitEstimates<<<(2560+NTHREADS)/NTHREADS,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
+    bitEstimates<<<(2560)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
     cudaDeviceSynchronize();
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -231,23 +281,22 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
     bitEstimateTime = bitEstimateTime + elapsedTime;
 #endif
-    HANDLE_ERROR(cudaMemcpy(lambda, dev_lambda, numBits * sizeof(float), cudaMemcpyDeviceToHost));
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // Transpose  lambda with rows == bits, to rows == parity checks
-    rowStart = 0;
-    for (unsigned int n=0; n<numBits; n++) {
-      decision[n] = (lambda[n] >= 0) ? 1 : 0;
-      estimates[n] = lambda[n];
-      for (unsigned int index=1; index<=mapCols2Rows[rowStart]; index++) {
-        oneDindex  = mapCols2Rows[rowStart + index];
-        lambdaByCheckIndex[oneDindex] = lambda[n];
-        cHat[oneDindex] = decision[n];
-      }
-      rowStart = rowStart + (maxChecksForBit+1);
-    }
+    // This resembles the earlier transpose operation, and so
+    // this time is accumulated with it.
+
+    // copy lambda (current bit estimates) into
+    // a checkMatrix (where each row represents a check
+    copyBitsToCheckmatrix<<<(2560)/NTHREADS+1,NTHREADS>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
+                                                                 dev_cHat, numBits, maxChecksForBit);
+    cudaDeviceSynchronize();
+
+    HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
+
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
     HANDLE_ERROR( cudaEventSynchronize(stopAt));
@@ -255,20 +304,31 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     transposeTime = transposeTime + elapsedTime;
 #endif
 
+    //DEBUG
+    // if( iterCounter == 1) {
+    //   printf("rSig: %.2f,  %.2f,  %.2f,  %.2f,  %.2f,  %.2f\n",
+    //          rSig[0],rSig[1],rSig[2],rSig[3],rSig[4],rSig[5]);
+    // }
+
+    // if( iterCounter < 10) {
+    //   HANDLE_ERROR(cudaMemcpy(lambda, dev_lambda, numBits * sizeof(float), cudaMemcpyDeviceToHost));
+    //   printf("Lambda  Iter: %i: %.2f,  %.2f,  %.2f,  %.2f,  %.2f,  %.2f\n",
+    //           iterCounter, lambda[0],lambda[1],lambda[2],lambda[3],lambda[4],lambda[5]);
+    // }
+
     // Check for correct decoding.
     rowStart = 0;
     allChecksPassed = true;
     for (unsigned int check=0; check<numChecks; check++) {
       unsigned int sum = 0;
       for (unsigned int index=1; index<= cHat[rowStart]; index++) {sum = sum + cHat[rowStart + index];}
-      if ((sum % 2) != 0 ) {
+      if ((sum % 2) != 0) {
         allChecksPassed = false;
         break;
       }
       rowStart = rowStart + maxBitsForCheck+1;
     }
-    if (allChecksPassed) {
-      break;}
+    if (allChecksPassed) {break;}
   }
 
   if(allChecksPassed == false) {
@@ -277,6 +337,7 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     // Print a status message on the iteration loop
     // printf("Success at %i iterations\n",iterCounter);
   }
+
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
   HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
