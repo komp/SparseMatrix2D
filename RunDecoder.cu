@@ -5,6 +5,8 @@
 
 #define ABS(a)  (((a) < (0)) ? (-(a)) : (a))
 
+#define HISTORY_LENGTH  20
+
 #include "GPUincludes.h"
 
 #define MAXITERATIONS  200
@@ -21,8 +23,8 @@ int main () {
   unsigned int  *mapRows2Cols, *mapCols2Rows;
   float *receivedSigs;
   unsigned int sigLength, numSigs;
-  char mapFile[] = "/home/komp/SparseMatrix2D/SampleData/Maps1024.bin";
-  char sigFile[] = "/home/komp/SparseMatrix2D/SampleData/sig_2.5.bin";
+  char mapFile[] = "./SampleData/Maps1024.bin";
+  char sigFile[] = "./SampleData/sig_2.5.bin";
   FILE *src;
   int errnum;
 
@@ -70,7 +72,6 @@ int main () {
   // ///////////////////////////////////////////
 
   unsigned int decision[sigLength];
-  unsigned int niters[sigLength];
   float estimates[sigLength];
   unsigned int sigStartIndex;
 
@@ -85,18 +86,22 @@ int main () {
   HANDLE_ERROR(cudaEventCreate(&stop));
   HANDLE_ERROR(cudaEventRecord(start, NULL));
 
+  int itersHistory[HISTORY_LENGTH];
+  int iters;
   int how_many;
 
-  how_many = 2* numSigs;
+  how_many = numSigs;
+  how_many = numSigs*10;
   //  how_many = 1;
 
   for (unsigned int i=0; i< how_many; i++) {
     sigStartIndex = (i % numSigs) * sigLength;
-    niters[i] = ldpcDecoder(& receivedSigs[sigStartIndex], numChecks, numBits,
-                            maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS,
-                            decision, estimates);
-    if (niters[i] < MAXITERATIONS) {successes++;}
-    iterationSum = iterationSum + niters[i];
+    iters = ldpcDecoder(& receivedSigs[sigStartIndex], numChecks, numBits,
+                        maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS,
+                        decision, estimates);
+    if (iters < MAXITERATIONS) {successes++;}
+    iterationSum = iterationSum + iters;
+    if ( i < HISTORY_LENGTH) { itersHistory[i] = iters;}
   }
 
   // Record the stop event
@@ -110,6 +115,6 @@ int main () {
   printf(" %i Successes out of %i inputs.\n", successes, how_many);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
-  for (unsigned int i=0; i< MIN(how_many, 10); i++) {printf(" %i", niters[i]);}
+  for (unsigned int i=0; i< MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
   printf ("\n");
 }
