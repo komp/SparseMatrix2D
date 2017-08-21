@@ -70,6 +70,41 @@ checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
 }
 
 __global__ void
+checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
+                            // eta is IN and OUT
+                            float *lambdaByCheckIndex, float *eta) {
+  // index
+  unsigned int m;
+  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int thisRowLength, thisRowStart, currentIndex;
+  float value, product;
+  float rowVals[128];
+  float maxETA = 1.0e6;
+
+
+  if (tid < numChecks) {
+    m = tid;
+    thisRowStart = m * (maxBitsForCheck+1);
+    thisRowLength = eta[thisRowStart];
+    product = 1.0;
+    for (unsigned int n=1; n<= thisRowLength ; n++) {
+      currentIndex = thisRowStart+n;
+      value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
+      product = product * value;
+      rowVals[n] = value;
+    }
+
+    for (unsigned int n=1; n<= thisRowLength; n++) {
+      currentIndex = thisRowStart+n;
+      value = 2 *atanhf(product/rowVals[n]);
+      value = (value > maxETA)? maxETA : value;
+      value = (value < -maxETA)? -maxETA : value;
+      eta[currentIndex] =  value;
+    }
+  }
+}
+
+__global__ void
 bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
              unsigned int numBits, unsigned int maxChecksForBit) {
 
@@ -245,9 +280,9 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // checkNode Processing  (1536)
-    checkNodeProcessing<<< (1536)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    cudaDeviceSynchronize();
+    // checkNode Processing  (numChecks)
+    checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    //    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -259,8 +294,7 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    transposeRC<<<(1536)/NTHREADS+1,NTHREADS>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
-    cudaDeviceSynchronize();
+    transposeRC<<<(numChecks)/NTHREADS+1,NTHREADS>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
@@ -273,8 +307,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    bitEstimates<<<(2560)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
-    cudaDeviceSynchronize();
+    bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
+
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
     HANDLE_ERROR( cudaEventSynchronize(stopAt));
@@ -290,9 +324,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 
     // copy lambda (current bit estimates) into
     // a checkMatrix (where each row represents a check
-    copyBitsToCheckmatrix<<<(2560)/NTHREADS+1,NTHREADS>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
+    copyBitsToCheckmatrix<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
                                                                  dev_cHat, numBits, maxChecksForBit);
-    cudaDeviceSynchronize();
 
     HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
     HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
