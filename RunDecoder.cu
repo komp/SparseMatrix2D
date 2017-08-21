@@ -23,8 +23,8 @@ int main () {
   unsigned int  *mapRows2Cols, *mapCols2Rows;
   float *receivedSigs;
   unsigned int sigLength, numSigs;
-  char mapFile[] = "./SampleData/Maps1024.bin";
-  char sigFile[] = "./SampleData/sig_2.5.bin";
+  char mapFile[] = "./SampleData/Maps1024_3.0.bin";
+  char sigFile[] = "./SampleData/sig_3.0.bin";
   FILE *src;
   int errnum;
 
@@ -91,8 +91,6 @@ int main () {
   int how_many;
 
   how_many = numSigs;
-  how_many = numSigs*10;
-  //  how_many = 1;
 
   for (unsigned int i=0; i< how_many; i++) {
     sigStartIndex = (i % numSigs) * sigLength;
