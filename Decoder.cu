@@ -79,27 +79,30 @@ checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck
   unsigned int thisRowLength, thisRowStart, currentIndex;
   float value, product;
   float rowVals[128];
-  float maxETA = 1.0e6;
-
 
   if (tid < numChecks) {
     m = tid;
     thisRowStart = m * (maxBitsForCheck+1);
     thisRowLength = eta[thisRowStart];
-    product = 1.0;
     for (unsigned int n=1; n<= thisRowLength ; n++) {
       currentIndex = thisRowStart+n;
       value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
-      product = product * value;
       rowVals[n] = value;
     }
 
     for (unsigned int n=1; n<= thisRowLength; n++) {
+      product = 1.0;
+      for (unsigned int zzz=1; zzz<= thisRowLength; zzz++) {
+        if (zzz != n) { product = product * rowVals[zzz];}
+      }
       currentIndex = thisRowStart+n;
-      value = 2 *atanhf(product/rowVals[n]);
-      value = (value > maxETA)? maxETA : value;
-      value = (value < -maxETA)? -maxETA : value;
+      value = -2 *atanhf(product);
+      value = (value > MAX_ETA)? MAX_ETA : value;
+      value = (value < -MAX_ETA)? -MAX_ETA : value;
       eta[currentIndex] =  value;
+    }
+
+    if (m == 200) {
     }
   }
 }
@@ -281,8 +284,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
     // checkNode Processing  (numChecks)
-    checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    //    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    //checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
