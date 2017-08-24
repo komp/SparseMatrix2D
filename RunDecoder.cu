@@ -91,6 +91,7 @@ int main () {
   int how_many;
 
   how_many = numSigs;
+  //  how_many = 1;
 
   for (unsigned int i=0; i< how_many; i++) {
     sigStartIndex = (i % numSigs) * sigLength;

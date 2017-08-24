@@ -14,7 +14,8 @@
 #define MAX_ETA                1e6
 #define SCALE_FACTOR           0.75
 
-#define NTHREADS    32
+#define NTHREADS   16
+#define CNP_THREADS   16  // checkNodeProcessing threads
 
 __global__ void
 checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -294,7 +295,7 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #endif
     // checkNode Processing  (numChecks)
     // checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    checkNodeProcessingOptimal <<< (numChecks)/CNP_THREADS+1,CNP_THREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
