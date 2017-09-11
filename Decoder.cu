@@ -15,7 +15,7 @@
 #define SCALE_FACTOR           0.75
 
 #define NTHREADS   16
-#define CNP_THREADS   16  // checkNodeProcessing threads
+#define CNP_THREADS   20  // checkNodeProcessing threads
 
 __global__ void
 checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -70,50 +70,50 @@ checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
   }
 }
 
+#define MIN_TANH_MAGNITUDE 1e-10
+
 __global__ void
 checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
                             // eta is IN and OUT
                             float *lambdaByCheckIndex, float *eta) {
   // index
   unsigned int m;
-  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  unsigned int thisRowLength, thisRowStart, currentIndex;
-  float value, product, arg;
-  float rowVals[128];
-  int nzeros;
+  unsigned int tid = threadIdx.x;
+  unsigned int blkid = blockIdx.x;
 
-  if (tid < numChecks) {
-    nzeros=0;
-    m = tid;
+  if (blkid < numChecks) {
+    __shared__ float rowVals[128];
+
+    unsigned int thisRowLength, thisRowStart, currentIndex;
+    float value;
+    float product = 1.0;
+
+    m = blkid;
     thisRowStart = m * (maxBitsForCheck+1);
     thisRowLength = eta[thisRowStart];
-    product = 1.0;
-    for (unsigned int n=1; n<= thisRowLength ; n++) {
-      currentIndex = thisRowStart+n;
-      value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
-      rowVals[n] = value;
-      if (value == 0.0) {
-        nzeros++;
-      } else {
-        product =  product * value;
-      }
-    }
 
-    if (nzeros > 1) {
-      for (unsigned int n=1; n<= thisRowLength; n++) {
-        currentIndex = thisRowStart+n;
-        eta[currentIndex] =  0.0;
-      }
-    } else {
-      for (unsigned int n=1; n<= thisRowLength; n++) {
-        currentIndex = thisRowStart+n;
-        arg = (rowVals[n] == 0.0)? product : product/rowVals[n];
-        value = -2 *atanhf(arg);
-        value = (value > MAX_ETA)? MAX_ETA : value;
-        value = (value < -MAX_ETA)? -MAX_ETA : value;
-        eta[currentIndex] =  value;
+    currentIndex = thisRowStart+ tid;
+    value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
+    if (value == 0.0) {
+      value = MIN_TANH_MAGNITUDE;
+    }
+    rowVals[tid] = value;
+
+    __syncthreads();
+
+    // compute product
+    if (tid == 1) {
+      for (unsigned int i=1; i<=thisRowLength; i++) {
+        product = product * rowVals[i];
       }
     }
+    __syncthreads();
+
+    value = -2 *atanhf(product/rowVals[tid]);
+    value = (value > MAX_ETA)? MAX_ETA : value;
+    value = (value < -MAX_ETA)? -MAX_ETA : value;
+
+    eta[currentIndex] =  value;
   }
 }
 
@@ -295,7 +295,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #endif
     // checkNode Processing  (numChecks)
     // checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    checkNodeProcessingOptimal <<< (numChecks)/CNP_THREADS+1,CNP_THREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    //    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    checkNodeProcessingOptimal <<< (numChecks),CNP_THREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));

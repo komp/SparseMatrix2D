@@ -118,6 +118,7 @@ numBits = 1408, numChecks = 384
  28065 cumulative iterations, or about 28.1 per packet.
 Number of iterations for the first few packets:   16 11 12 17 11 8 17 17 11 13 12 13 13 13 12 10 27 28 15 12
 
+=====================================================
 Using optimal algorithm (tanh) - slightly better implementation.
         Compute product of tanh terms only once while keeping the tanhVal terms;
         then use  -2 * atanh (product/tanhVal[i]) to update eta.
@@ -132,6 +133,7 @@ numBits = 1408, numChecks = 384
  29676 cumulative iterations, or about 29.7 per packet.
 Number of iterations for the first few packets:   16 10 12 16 11 9 21 19 11 16 13 14 15 15 10 12 20 39 16 13
 
+=====================================================
 Using optimal algorithm (tanh) - implementation from previous report
 ONLY reduced NTHREADS  from 32 to 16.
 (note, reducing down to 4 produces similar results).
@@ -145,3 +147,28 @@ numBits = 1408, numChecks = 384
  942 Successes out of 1000 inputs.
  29676 cumulative iterations, or about 29.7 per packet.
 Number of iterations for the first few packets:   16 10 12 16 11 9 21 19 11 16 13 14 15 15 10 12 20 39 16 13
+
+======================================================
+Using optimal algorithm (tanh) -
+with different method to handle  terms where tanh(...) == 0
+(see previous implementation for details about this issue)
+Instead counting these 0 terms, I replace each one with
+a number very close to 0,  MIN_TANH_MAGNITUDE.
+Dr. Perrins concurred that this is reasonable).
+        This significantly reduces the number of conditionals,
+which is important for GPU performance.
+        Also, rather surprsingly, it correctly decodes
+a few more packets  (947 :: 942) -- from exactly the same input)
+and fewer average iterations.  The number of iterations
+for the first 20 packets more closely matches the results
+from the naive implementation -- suggesting that my
+count the 0's method, was not exactly correct.
+======================================================
+./RunDecoder
+parameters have been read.
+numBits = 1408, numChecks = 384
+6 18 1408 1000
+3921.919678 msec to decode 1000 packets.
+ 947 Successes out of 1000 inputs.
+ 27840 cumulative iterations, or about 27.8 per packet.
+Number of iterations for the first few packets:   16 11 12 17 11 8 17 17 11 13 12 13 13 13 12 10 27 28 15 12
