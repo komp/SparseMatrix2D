@@ -18,15 +18,30 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int *decision,
                  float *estimates);
 
-int main () {
+int main (int argc, char **argv) {
+
   unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit;
   unsigned int  *mapRows2Cols, *mapCols2Rows;
   float *receivedSigs;
   unsigned int sigLength, numSigs;
-  char mapFile[] = "./SampleData/Maps1024_3.0.bin";
-  char sigFile[] = "./SampleData/sig_3.0.bin";
+  char mapFile[256];        /* = "./SampleData/Maps1024_3.0.bin"; */
+  char* sigFile;            /* = "./SampleData/sig_3.0.bin"; */
   FILE *src;
   int errnum;
+  unsigned int infoleng, rnum, rdenom;
+  float ebno;
+
+  if (argc < 6) {
+    printf("usage:  RunDecoder <infolength> <r-numerator> <r-denominator> <ebno> <signal-filename>\n" );
+    exit(-1);
+  }
+  infoleng = atoi(argv[1]);
+  rnum = atoi(argv[2]);
+  rdenom = atoi(argv[3]);
+  ebno = (float)atof(argv[4]);
+  sigFile = argv[5];
+  sprintf(mapFile, "./G_and_H_Matrices/Maps_%d%d_%d.bin", rnum, rdenom, infoleng);
+  printf("Using files:  %s and %s\n", mapFile, sigFile);
 
   src = fopen(mapFile, "r");
   if (src == NULL) {
