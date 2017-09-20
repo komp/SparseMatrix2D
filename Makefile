@@ -13,10 +13,10 @@ SMS ?= 20 30 35 37 50 52 60
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
 # internal flags
-CCFLAGS     :=
+CCFLAGS     := -std=c++11
 LDFLAGS     :=
 
-NVCC_FLAGS   := -m64 -Wno-deprecated-gpu-targets $(GENCODE_FLAGS) --generate-line-info -O2
+NVCC_FLAGS   := -std=c++11 -m64 -Wno-deprecated-gpu-targets $(GENCODE_FLAGS) --generate-line-info -O2
 NVCC_INCLUDES := -I$(CUDA_PATH)/samples/common/inc
 NVCC_LIBRARIES :=
 
@@ -36,7 +36,7 @@ Decoder.o: Decoder.cu
 RunDecoder.o: RunDecoder.cu
 	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
 
-RunDecoder: Decoder.o RunDecoder.o
+RunDecoder: Encoder.o Decoder.o RunDecoder.o
 	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
 
 run: build
