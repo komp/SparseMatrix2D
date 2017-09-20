@@ -81,35 +81,36 @@ checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck
   unsigned int tid = threadIdx.x;
   unsigned int blkid = blockIdx.x;
 
-  if (blkid < numChecks) {
+  if (blkid < numChecks && tid < maxBitsForCheck) {
     __shared__ float rowVals[128];
 
     unsigned int thisRowLength, thisRowStart, currentIndex;
     float value;
-    float product = 1.0;
 
     m = blkid;
     thisRowStart = m * (maxBitsForCheck+1);
     thisRowLength = eta[thisRowStart];
 
-    currentIndex = thisRowStart+ tid;
+    currentIndex = thisRowStart+ tid + 1;
     value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
     if (value == 0.0) {
       value = MIN_TANH_MAGNITUDE;
     }
-    rowVals[tid] = value;
+    rowVals[tid+1] = value;
 
     __syncthreads();
 
     // compute product
-    if (tid == 1) {
+    if (tid == 0) {
+      float product = 1.0;
       for (unsigned int i=1; i<=thisRowLength; i++) {
         product = product * rowVals[i];
       }
+      rowVals[0] = product;
     }
     __syncthreads();
 
-    value = -2 *atanhf(product/rowVals[tid]);
+    value = -2 *atanhf(rowVals[0]/rowVals[tid+1]);
     value = (value > MAX_ETA)? MAX_ETA : value;
     value = (value < -MAX_ETA)? -MAX_ETA : value;
 
