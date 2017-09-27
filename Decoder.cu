@@ -12,111 +12,125 @@
 // #define MIN(a,b)  (((a) < (b)) ? (a) : (b))
 #define ABS(a)  (((a) < (0)) ? (-(a)) : (a))
 #define MAX_ETA                1e6
+#define MIN_TANH_MAGNITUDE     1e-10
 #define SCALE_FACTOR           0.75
 
 #define NTHREADS   16
 #define CNP_THREADS   20  // checkNodeProcessing threads
 
 __global__ void
-checkNodeProcessing (unsigned int numChecks, unsigned int maxBitsForCheck,
-                      // eta is IN and OUT
-                      float *lambdaByCheckIndex, float *eta) {
-  // edk  HACK
-  // This was signs[maxBitsForCheck], which generates the error:
-  // error: constant value is not known.
-  // Since we are in a kernel function, we probably need a compile-time constant.
-  // 128 should be much larger than maxBitsForCheck for any reasonable LDPC encoding.
-  unsigned int signs[128];
-  unsigned int signProduct;
-  float value, min1, min2;
-  unsigned int minIndex;
+checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
+                            float *lambdaByCheckIndex, float *eta);
+__global__ void
+checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
+                                 float *lambdaByCheckIndex, float *eta);
 
-  // index
+__global__ void
+checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
+                           float *lambdaByCheckIndex, float *eta);
+
+__global__ void
+checkNodeProcessingMinSumBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
+                                float *lambdaByCheckIndex, float *eta);
+
+
+__global__ void
+checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsForCheck,
+                            float *lambdaByCheckIndex, float *eta) {
   unsigned int m;
   unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
   unsigned int thisRowLength, thisRowStart, currentIndex;
+  float value, product;
+  float rowVals[128];
 
   if (tid < numChecks) {
     m = tid;
     thisRowStart = m * (maxBitsForCheck+1);
-    // signs[n]  == 0  ==>  positive; 1  ==>  negative
-    memset(signs, 0, (maxBitsForCheck+1)*sizeof(signs[0]));
-    signProduct = 0;
-    min1 = MAX_ETA;
-    min2 =  MAX_ETA;
-    minIndex = 1;
     thisRowLength = eta[thisRowStart];
+
+    // Optimal solution using tanh
+    // Each thread processes an entire row.
+
+    // compute the tanh values, and temporarily store back into eta
     for (unsigned int n=1; n<= thisRowLength ; n++) {
       currentIndex = thisRowStart+n;
-      value = eta[currentIndex] - lambdaByCheckIndex[currentIndex];
-      signs[n] = (value < 0)? 1 : 0;
-      signProduct = (signProduct != signs[n])? 1 : 0;
-      value = ABS(value);
-      if (value < min1) {
-        min2 = min1;
-        min1 = value;
-        minIndex = n;
-      } else if ( value < min2) {
-        min2 = value;
+      eta[currentIndex] = tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
+    }
+
+    // Compute the product of the other tanh terms for each non-zero elements.
+    for (unsigned int n=1; n<= thisRowLength ; n++) {
+      product = 1.0;
+      for (unsigned int newvar=1; newvar<= thisRowLength; newvar++) {
+        if (newvar != n) product=product* eta[thisRowStart+newvar];
       }
+      value = -2 *atanhf(product);
+      value = (value > MAX_ETA)? MAX_ETA : value;
+      value = (value < -MAX_ETA)? -MAX_ETA : value;
+      rowVals[n] =  value;
     }
-    min1 = min1 * SCALE_FACTOR * (-1);
-    min2 = min2 * SCALE_FACTOR * (-1);
-    for (unsigned int n=1; n<= thisRowLength; n++) {
-      currentIndex = thisRowStart+n;
-      eta[currentIndex] =  (n == minIndex) ? min2 : min1;
-      if (signs[n] != signProduct) {eta[currentIndex] = -eta[currentIndex];}
-    }
+    for (unsigned int n=1; n<= thisRowLength ; n++) { eta[thisRowStart+n] = rowVals[n];}
   }
 }
-
-#define MIN_TANH_MAGNITUDE 1e-10
 
 __global__ void
-checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
-                            // eta is IN and OUT
+checkNodeProcessingOptimalCheckZero (unsigned int numChecks, unsigned int maxBitsForCheck,
                             float *lambdaByCheckIndex, float *eta) {
-  // index
-  unsigned int m;
-  unsigned int tid = threadIdx.x;
-  unsigned int blkid = blockIdx.x;
+  unsigned int m, indexOfZero;
+  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int thisRowLength, thisRowStart, currentIndex;
+  float value, product, arg;
+  float rowVals[128];
+  int nzeros;
 
-  if (blkid < numChecks && tid < maxBitsForCheck) {
-    __shared__ float rowVals[128];
-
-    unsigned int thisRowLength, thisRowStart, currentIndex;
-    float value;
-
-    m = blkid;
+  if (tid < numChecks) {
+    nzeros=0;
+    indexOfZero = 0;
+    m = tid;
     thisRowStart = m * (maxBitsForCheck+1);
     thisRowLength = eta[thisRowStart];
+    product = 1.0;
 
-    currentIndex = thisRowStart+ tid + 1;
-    value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
-    if (value == 0.0) {
-      value = MIN_TANH_MAGNITUDE;
-    }
-    rowVals[tid+1] = value;
-
-    __syncthreads();
-
-    // compute product
-    if (tid == 0) {
-      float product = 1.0;
-      for (unsigned int i=1; i<=thisRowLength; i++) {
-        product = product * rowVals[i];
+    // Optimal solution using tanh
+    // Each thread processes an entire row.
+    // Compute the product of the tanh terms for all non-zero elements.
+    for (unsigned int n=1; n<= thisRowLength ; n++) {
+      currentIndex = thisRowStart+n;
+      value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
+      rowVals[n] = value;
+      if (value == 0.0) {
+        nzeros++;
+        indexOfZero = n;
+      } else {
+        product =  product * value;
       }
-      rowVals[0] = product;
     }
-    __syncthreads();
 
-    value = -2 *atanhf(rowVals[0]/rowVals[tid+1]);
-    value = (value > MAX_ETA)? MAX_ETA : value;
-    value = (value < -MAX_ETA)? -MAX_ETA : value;
-
-    eta[currentIndex] =  value;
+    // Now, set the value for each element in this row.
+    // If there are 2 or more zero's, then the product without
+    // any single value will still be zero.
+    if (nzeros > 1) {
+      for (unsigned int n=1; n<= thisRowLength; n++) {
+        currentIndex = thisRowStart+n;
+        eta[currentIndex] =  0.0;
+      }
+    } else if (nzeros == 1) {
+      for (unsigned int n=1; n<= thisRowLength; n++) {
+        currentIndex = thisRowStart+n;
+        eta[currentIndex] =  (n == indexOfZero)?product : 0.0;
+      }
+    } else {
+      for (unsigned int n=1; n<= thisRowLength; n++) {
+        currentIndex = thisRowStart+n;
+        arg = product/rowVals[n];
+        value = -2 *atanhf(arg);
+        value = (value > MAX_ETA)? MAX_ETA : value;
+        value = (value < -MAX_ETA)? -MAX_ETA : value;
+        eta[currentIndex] =  value;
+      }
+    }
   }
 }
+
 
 __global__ void
 bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
@@ -294,10 +308,13 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR(cudaEventRecord(startAt, NULL));
 #endif
-    // checkNode Processing  (numChecks)
-    // checkNodeProcessing<<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    //    checkNodeProcessingOptimal <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    checkNodeProcessingOptimal <<< (numChecks),CNP_THREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    // checkNodeProcessingMinSum <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    // checkNodeProcessingMinSumBlock <<< numChecks,32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+    //  1 thread per block is significantly slower than 2.  (23300 :: 26000 msec) though I think I'm using just 1.
+    //  >2 does not help much more.
+    // checkNodeProcessingOptimal <<<numChecks/2,2>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
+
+    checkNodeProcessingOptimalBlock <<<numChecks, 32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
 #ifdef INTERNAL_TIMINGS_4_DECODER
     HANDLE_ERROR( cudaEventRecord(stopAt, NULL));

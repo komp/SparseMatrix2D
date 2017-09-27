@@ -10,7 +10,7 @@
 
 #include "GPUincludes.h"
 
-#define MAXITERATIONS  200
+#define MAXITERATIONS  60
 
 void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
                   unsigned int numMsgBits, unsigned int numRowsinRom, unsigned int numParBits,
@@ -140,7 +140,7 @@ int main (int argc, char **argv) {
   float msecRecord = 0.0f;
   float msecTotal = 0.0f;
 
-  int itersHistory[HISTORY_LENGTH];
+  int itersHistory[HISTORY_LENGTH+1];
   int iters;
 
   unsigned int* infoWord;
@@ -152,7 +152,7 @@ int main (int argc, char **argv) {
   codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
 
-  for (unsigned int i=0; i< how_many; i++) {
+  for (unsigned int i=1; i<= how_many; i++) {
 
     for (unsigned int j=0; j < infoLeng; j++) {
       infoWord[j] = (0.5 >= rDist(generator))? 1:0;
@@ -186,14 +186,17 @@ int main (int argc, char **argv) {
 
     if (iters < MAXITERATIONS) {successes++;}
     iterationSum = iterationSum + iters;
-    if ( i < HISTORY_LENGTH) { itersHistory[i] = iters;}
+    if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
+    if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%.0f msec).\n", successes, i, msecTotal);
   }
 
-  printf("%f msec to decode %i packets.\n", msecTotal, how_many);
+  printf("%.0f msec to decode %i packets.\n", msecTotal, how_many);
 
   printf(" %i Successes out of %i inputs.\n", successes, how_many);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
-  for (unsigned int i=0; i< MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
+  for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
   printf ("\n");
+
+  cudaDeviceReset();
 }
