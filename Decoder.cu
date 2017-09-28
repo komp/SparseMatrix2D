@@ -73,66 +73,6 @@ checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsFor
 }
 
 __global__ void
-checkNodeProcessingOptimalCheckZero (unsigned int numChecks, unsigned int maxBitsForCheck,
-                            float *lambdaByCheckIndex, float *eta) {
-  unsigned int m, indexOfZero;
-  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  unsigned int thisRowLength, thisRowStart, currentIndex;
-  float value, product, arg;
-  float rowVals[128];
-  int nzeros;
-
-  if (tid < numChecks) {
-    nzeros=0;
-    indexOfZero = 0;
-    m = tid;
-    thisRowStart = m * (maxBitsForCheck+1);
-    thisRowLength = eta[thisRowStart];
-    product = 1.0;
-
-    // Optimal solution using tanh
-    // Each thread processes an entire row.
-    // Compute the product of the tanh terms for all non-zero elements.
-    for (unsigned int n=1; n<= thisRowLength ; n++) {
-      currentIndex = thisRowStart+n;
-      value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
-      rowVals[n] = value;
-      if (value == 0.0) {
-        nzeros++;
-        indexOfZero = n;
-      } else {
-        product =  product * value;
-      }
-    }
-
-    // Now, set the value for each element in this row.
-    // If there are 2 or more zero's, then the product without
-    // any single value will still be zero.
-    if (nzeros > 1) {
-      for (unsigned int n=1; n<= thisRowLength; n++) {
-        currentIndex = thisRowStart+n;
-        eta[currentIndex] =  0.0;
-      }
-    } else if (nzeros == 1) {
-      for (unsigned int n=1; n<= thisRowLength; n++) {
-        currentIndex = thisRowStart+n;
-        eta[currentIndex] =  (n == indexOfZero)?product : 0.0;
-      }
-    } else {
-      for (unsigned int n=1; n<= thisRowLength; n++) {
-        currentIndex = thisRowStart+n;
-        arg = product/rowVals[n];
-        value = -2 *atanhf(arg);
-        value = (value > MAX_ETA)? MAX_ETA : value;
-        value = (value < -MAX_ETA)? -MAX_ETA : value;
-        eta[currentIndex] =  value;
-      }
-    }
-  }
-}
-
-
-__global__ void
 bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
              unsigned int numBits, unsigned int maxChecksForBit) {
 
@@ -158,14 +98,17 @@ __global__ void
 transposeRC (unsigned int* map, float *checkRows, float *bitRows,
              unsigned int numChecks, unsigned int maxBitsForCheck) {
   // index
-  unsigned int check = threadIdx.x + blockIdx.x * blockDim.x;
-  unsigned int rowStart;
+  unsigned int m,n;
+  unsigned int thisRowStart, thisRowLength;
   unsigned int cellIndex, oneDindex;
 
-  if (check < numChecks) {
-    rowStart = check * (maxBitsForCheck+1);
-    for (unsigned int index=1; index<= map[rowStart]; index++) {
-      cellIndex = rowStart + index;
+  m = blockIdx.x;
+  n = threadIdx.x + 1;
+  if (m < numChecks) {
+    thisRowStart = m * (maxBitsForCheck+1);
+    thisRowLength = map[thisRowStart];
+    if (n <= thisRowLength) {
+      cellIndex = thisRowStart + n;
       oneDindex = map[cellIndex];
       bitRows[oneDindex] = checkRows[cellIndex];
     }
@@ -180,22 +123,26 @@ copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
                        unsigned int *hd,
                        unsigned int numBits, unsigned int maxChecksForBit) {
   // index
-  unsigned int bitIndex = threadIdx.x + blockIdx.x * blockDim.x;
-  unsigned int rowStart = 0;
+  unsigned int m, n;
+  unsigned int thisRowStart, thisRowLength;
   unsigned int cellIndex, oneDindex;
   float thisBitEstimate;
 
-  if (bitIndex < numBits) {
-    rowStart = bitIndex * (maxChecksForBit+1);
-    thisBitEstimate = bitEstimates[bitIndex];
-    for (unsigned int index=1; index<= map[rowStart]; index++) {
-      cellIndex = rowStart + index;
+  n = blockIdx.x;
+  m = threadIdx.x + 1;
+  if (n < numBits) {
+    thisRowStart = n * (maxChecksForBit+1);
+    thisRowLength = map[thisRowStart];
+    thisBitEstimate = bitEstimates[n];
+    if (m <= thisRowLength) {
+      cellIndex = thisRowStart + m;
       oneDindex = map[cellIndex];
       checkRows[oneDindex] = thisBitEstimate;
       hd[oneDindex] = (thisBitEstimate >= 0) ? 1 : 0;
     }
   }
 }
+
 
 int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
@@ -284,18 +231,6 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-#ifdef INTERNAL_TIMINGS_4_DECODER
-  float elapsedTime, partTimes;
-  float  allTime = 0.0, nodeProcessingTime = 0.0, bitEstimateTime = 0.0, transposeTime = 0.0;
-  cudaEvent_t globalStart;
-  HANDLE_ERROR(cudaEventCreate(&globalStart));
-  cudaEvent_t startAt;
-  HANDLE_ERROR(cudaEventCreate(&startAt));
-  cudaEvent_t stopAt;
-  HANDLE_ERROR(cudaEventCreate(&stopAt));
-  HANDLE_ERROR(cudaEventRecord(globalStart, NULL));
-#endif
-
   ////////////////////////////////////////////////////////////////////////////
   // Main iteration loop
   ////////////////////////////////////////////////////////////////////////////
@@ -305,9 +240,6 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 
   for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
 
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR(cudaEventRecord(startAt, NULL));
-#endif
     // checkNodeProcessingMinSum <<< (numChecks)/NTHREADS+1,NTHREADS>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
     // checkNodeProcessingMinSumBlock <<< numChecks,32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
     //  1 thread per block is significantly slower than 2.  (23300 :: 26000 msec) though I think I'm using just 1.
@@ -316,70 +248,20 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 
     checkNodeProcessingOptimalBlock <<<numChecks, 32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
 
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
-    HANDLE_ERROR( cudaEventSynchronize(stopAt));
-    HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
-    nodeProcessingTime = nodeProcessingTime + elapsedTime;
-#endif
-
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR(cudaEventRecord(startAt, NULL));
-#endif
-    transposeRC<<<(numChecks)/NTHREADS+1,NTHREADS>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
-
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
-    HANDLE_ERROR( cudaEventSynchronize(stopAt));
-    HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
-    transposeTime = transposeTime + elapsedTime;
-#endif
+    transposeRC<<<(numChecks),32>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
 
     // bit estimates update
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR(cudaEventRecord(startAt, NULL));
-#endif
     bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
 
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
-    HANDLE_ERROR( cudaEventSynchronize(stopAt));
-    HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
-    bitEstimateTime = bitEstimateTime + elapsedTime;
-#endif
-
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR(cudaEventRecord(startAt, NULL));
-#endif
     // This resembles the earlier transpose operation, and so
     // this time is accumulated with it.
 
     // copy lambda (current bit estimates) into
     // a checkMatrix (where each row represents a check
-    copyBitsToCheckmatrix<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
-                                                                 dev_cHat, numBits, maxChecksForBit);
+    copyBitsToCheckmatrix<<<numBits,32>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
+                                            dev_cHat, numBits, maxChecksForBit);
 
     HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
-    HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
-
-#ifdef INTERNAL_TIMINGS_4_DECODER
-    HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
-    HANDLE_ERROR( cudaEventSynchronize(stopAt));
-    HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, startAt, stopAt));
-    transposeTime = transposeTime + elapsedTime;
-#endif
-
-    //DEBUG
-    // if( iterCounter == 1) {
-    //   printf("rSig: %.2f,  %.2f,  %.2f,  %.2f,  %.2f,  %.2f\n",
-    //          rSig[0],rSig[1],rSig[2],rSig[3],rSig[4],rSig[5]);
-    // }
-
-    // if( iterCounter < 10) {
-    //   HANDLE_ERROR(cudaMemcpy(lambda, dev_lambda, numBits * sizeof(float), cudaMemcpyDeviceToHost));
-    //   printf("Lambda  Iter: %i: %.2f,  %.2f,  %.2f,  %.2f,  %.2f,  %.2f\n",
-    //           iterCounter, lambda[0],lambda[1],lambda[2],lambda[3],lambda[4],lambda[5]);
-    // }
 
     // Check for correct decoding.
     rowStart = 0;
@@ -402,23 +284,5 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     // Print a status message on the iteration loop
     // printf("Success at %i iterations\n",iterCounter);
   }
-
-
-#ifdef INTERNAL_TIMINGS_4_DECODER
-  HANDLE_ERROR( cudaEventRecord(stopAt, NULL));
-  HANDLE_ERROR( cudaEventSynchronize(stopAt));
-  HANDLE_ERROR( cudaEventElapsedTime(&elapsedTime, globalStart, stopAt));
-  allTime = elapsedTime;
-  partTimes = nodeProcessingTime + bitEstimateTime + transposeTime;
-
-  printf("\n");
-  printf ("Total Time      : %.1f microsec\n", 1000*allTime);
-  printf ("node processing : %.1f microsec (%.2f%)\n", 1000*nodeProcessingTime, 100 *nodeProcessingTime/allTime);
-  printf ("bit estimates   : %.1f microsec (%.2f%)\n", 1000*bitEstimateTime, 100 * bitEstimateTime/allTime);
-  printf ("transpose       : %.1f microsec (%.2f%)\n", 1000*transposeTime, 100 * transposeTime/allTime);
-  printf ("Other???        : %.1f microsec (%.2f%)\n", 1000*(allTime - partTimes) , 100 * (allTime - partTimes)/allTime);
-  printf("\n");
-#endif
-
   return (iterCounter);
 }
