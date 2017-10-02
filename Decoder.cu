@@ -316,5 +316,17 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     // Print a status message on the iteration loop
     // printf("Success at %i iterations\n",iterCounter);
   }
+  HANDLE_ERROR( cudaFree( dev_rSig));
+  HANDLE_ERROR( cudaFree( dev_eta));
+  HANDLE_ERROR( cudaFree( dev_lambda));
+  HANDLE_ERROR( cudaFree( dev_etaByBitIndex));
+  HANDLE_ERROR( cudaFree( dev_lambdaByCheckIndex));
+  HANDLE_ERROR( cudaFree( dev_mapRC));
+  HANDLE_ERROR( cudaFree( dev_mapCR));
+  HANDLE_ERROR( cudaFree( dev_cHat));
+  HANDLE_ERROR( cudaFree( dev_parityBits));
+  HANDLE_ERROR( cudaFree( dev_paritySum));
+  HANDLE_ERROR( cudaFree( temp_storage));
+
   return (iterCounter);
 }
