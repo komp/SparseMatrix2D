@@ -2,12 +2,16 @@
 
 // Based on the Eric's C-code implementation of ldpc decode.
 //
+#include <cstdio>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 
 #include "GPUincludes.h"
+
+// For the CUB library
+#include "cub.cuh"
 
 // #define MIN(a,b)  (((a) < (b)) ? (a) : (b))
 #define ABS(a)  (((a) < (0)) ? (-(a)) : (a))
@@ -143,6 +147,21 @@ copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
   }
 }
 
+__global__ void
+calcParityBits (unsigned int* cHat, unsigned int *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck) {
+
+  unsigned int m = threadIdx.x + blockIdx.x * blockDim.x;
+  unsigned int thisRowLength, thisRowStart;
+  unsigned int sum;
+
+  if (m < numChecks) {
+    thisRowStart = m * (maxBitsForCheck+1);
+    thisRowLength = cHat[thisRowStart];
+    sum = 0;
+    for (unsigned int n=1; n<= thisRowLength ; n++) {sum += cHat[thisRowStart+n];}
+    parityBits[m] = sum % 2;
+  }
+}
 
 int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
@@ -162,6 +181,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   float etaByBitIndex[nBitsByChecks];
   float lambdaByCheckIndex[nChecksByBits];
   unsigned int cHat [nChecksByBits];
+  unsigned int paritySum;
+  // unsigned int parityBits[numChecks];
 
   unsigned int iterCounter;
   bool allChecksPassed = false;
@@ -176,6 +197,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   float *dev_etaByBitIndex;
   float *dev_lambdaByCheckIndex;
   unsigned int *dev_cHat;
+  unsigned int *dev_parityBits;
+  unsigned int *dev_paritySum;
 
   unsigned int *dev_mapRC;
   unsigned int *dev_mapCR;
@@ -188,6 +211,8 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   HANDLE_ERROR( cudaMalloc( (void**)&dev_mapRC, nChecksByBits * sizeof(unsigned int)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_mapCR, nBitsByChecks * sizeof(unsigned int)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(unsigned int)));
 
   memcpy(lambda, rSig, numBits*sizeof(lambda[0]));
   memset(eta, 0, nChecksByBits*sizeof(eta[0]));
@@ -225,6 +250,12 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
     rowStart = rowStart + (maxChecksForBit+1);
   }
 
+  // Determine temporary device storage requirements for CUB reduce; and then allocate the space.
+  size_t temp_storage_bytes;
+  int* temp_storage=NULL;
+  cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
+  cudaMalloc(&temp_storage,temp_storage_bytes);
+
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_mapRC, mapRows2Cols, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
@@ -258,29 +289,30 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
 
     // copy lambda (current bit estimates) into
     // a checkMatrix (where each row represents a check
-    copyBitsToCheckmatrix<<<numBits,32>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
+    copyBitsToCheckmatrix<<<numBits,16>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
                                             dev_cHat, numBits, maxChecksForBit);
+    calcParityBits <<<numChecks, 2>>>(dev_cHat, dev_parityBits, numChecks, maxBitsForCheck);
 
-    HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
+    // HANDLE_ERROR(cudaMemcpy(& parityBits,dev_parityBits, numChecks* sizeof(int),cudaMemcpyDeviceToHost));
+    // allChecksPassed = true;
+    // for (int j=0; j< numChecks; j++) {
+    //   if (parityBits[j] != 0) {
+    //     allChecksPassed = false;
+    //     break;
+    //   }
+    // }
 
-    // Check for correct decoding.
-    rowStart = 0;
-    allChecksPassed = true;
-    for (unsigned int check=0; check<numChecks; check++) {
-      unsigned int sum = 0;
-      for (unsigned int index=1; index<= cHat[rowStart]; index++) {sum = sum + cHat[rowStart + index];}
-      if ((sum % 2) != 0) {
-        allChecksPassed = false;
-        break;
-      }
-      rowStart = rowStart + maxBitsForCheck+1;
-    }
+    cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
+    HANDLE_ERROR(cudaMemcpy(& paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));
+    allChecksPassed =  (paritySum == 0)? true : false;
+
     if (allChecksPassed) {break;}
   }
 
   if(allChecksPassed == false) {
     // printf("Decoding failure after %d iterations\n", iterCounter);
   } else {
+    HANDLE_ERROR(cudaMemcpy(cHat, dev_cHat, nChecksByBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
     // Print a status message on the iteration loop
     // printf("Success at %i iterations\n",iterCounter);
   }
