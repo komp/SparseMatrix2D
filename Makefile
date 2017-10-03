@@ -31,28 +31,15 @@ all: build
 
 build: RunDecoder
 
-Decoder.o: Decoder.cu
+SOURCES := $(wildcard *.cu)
+### OBJECTS := $(patsubst %.cu, %.o, $(SOURCES))
+OBJECTS := bitEstimates.o  cnpMinSumBlock.o  cnpOptimalBlock.o  cnpOptimal.o Decoder.o  \
+calcParityBits.o  cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o Encoder.o  RunDecoder.o  transposeRC.o
+
+%.o: %.cu
 	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
 
-Encoder.o: Encoder.cu
-	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-cnpMinSum.o: cnpMinSum.cu
-	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-cnpMinSumBlock.o: cnpMinSumBlock.cu
-	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-cnpOptimal.o: cnpOptimal.cu
-	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-cnpOptimalBlock.o: cnpOptimalBlock.cu
-	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-RunDecoder.o: RunDecoder.cu
-	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
-
-RunDecoder: Encoder.o Decoder.o cnpMinSum.o cnpMinSumBlock.o cnpOptimal.o cnpOptimalBlock.o RunDecoder.o
+RunDecoder: $(OBJECTS)
 	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
 
 run: build
@@ -69,4 +56,4 @@ TestEncoder: Encoder.o TestEncoder.o
 	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
 
 clean:
-	rm -f RunDecoder RunDecoder.o Decoder.o
+	rm -f RunDecoder $(OBJECTS)

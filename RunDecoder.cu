@@ -4,25 +4,11 @@
 #include <stdio.h>
 #include <errno.h>
 
-#define ABS(a)  (((a) < (0)) ? (-(a)) : (a))
+#include "GPUincludes.h"
+#include "LDPC.h"
 
 #define HISTORY_LENGTH  20
-
-#include "GPUincludes.h"
-
 #define MAXITERATIONS  60
-
-void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
-                  unsigned int numMsgBits, unsigned int numRowsinRom, unsigned int numParBits,
-                   unsigned int shiftRegLength,
-                  unsigned int *codeWord);
-
-int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
-                 unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
-                 unsigned int *mapRows2Cols, unsigned int *mapCols2Rows,
-                 unsigned int maxIterations,
-                 unsigned int *decision,
-                 float *estimates);
 
 int main (int argc, char **argv) {
 
@@ -152,11 +138,15 @@ int main (int argc, char **argv) {
   codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
 
+  //  initLdpcDecoder (numChecks, numBits, maxBitsForCheck, maxChecksForBit,
+  //                   mapRows2Cols, mapCols2Rows);
+
   for (unsigned int i=1; i<= how_many; i++) {
 
     for (unsigned int j=0; j < infoLeng; j++) {
       infoWord[j] = (0.5 >= rDist(generator))? 1:0;
     }
+
     ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
 
     // Modulate the codeWord, and add noise
@@ -175,9 +165,14 @@ int main (int argc, char **argv) {
     // Finally, ready to decode signal
 
     HANDLE_ERROR(cudaEventRecord(start, NULL));
+
     iters = ldpcDecoder(receivedSig, numChecks, numBits,
                         maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS,
                         decision, estimates);
+
+    // iters = ldpcDecoderWithInit (receivedSig, MAXITERATIONS, decision, estimates);
+
+
     // Record the stop event
     HANDLE_ERROR( cudaEventRecord(stop, NULL));
     HANDLE_ERROR( cudaEventSynchronize(stop));
