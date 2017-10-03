@@ -30,7 +30,6 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   unsigned int nBitsByChecks = numBits*(maxChecksForBit+1);
 
   float eta[nChecksByBits];
-  float lambda[numBits];
   float etaByBitIndex[nBitsByChecks];
   float lambdaByCheckIndex[nChecksByBits];
   unsigned int cHat [nChecksByBits];
@@ -67,7 +66,6 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(unsigned int)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(unsigned int)));
 
-  memcpy(lambda, rSig, numBits*sizeof(lambda[0]));
   memset(eta, 0, nChecksByBits*sizeof(eta[0]));
   memset(etaByBitIndex, 0, nBitsByChecks*sizeof(etaByBitIndex[0]));
   memset(lambdaByCheckIndex, 0, nChecksByBits*sizeof(lambdaByCheckIndex[0]));
@@ -98,7 +96,7 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
   for (unsigned int bit=0; bit<numBits; bit++) {
     for (unsigned int index=1; index<=mapCols2Rows[rowStart]; index++) {
       oneDindex  = mapCols2Rows[rowStart +index];
-      lambdaByCheckIndex[oneDindex] = lambda[bit];
+      lambdaByCheckIndex[oneDindex] = rSig[bit];
     }
     rowStart = rowStart + (maxChecksForBit+1);
   }
