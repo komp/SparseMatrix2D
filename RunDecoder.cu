@@ -138,8 +138,8 @@ int main (int argc, char **argv) {
   codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
 
-  //  initLdpcDecoder (numChecks, numBits, maxBitsForCheck, maxChecksForBit,
-  //                   mapRows2Cols, mapCols2Rows);
+  initLdpcDecoder (numChecks, numBits, maxBitsForCheck, maxChecksForBit,
+                   mapRows2Cols, mapCols2Rows);
 
   for (unsigned int i=1; i<= how_many; i++) {
 
@@ -163,17 +163,10 @@ int main (int argc, char **argv) {
     for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
 
     // Finally, ready to decode signal
-
     HANDLE_ERROR(cudaEventRecord(start, NULL));
 
-    iters = ldpcDecoder(receivedSig, numChecks, numBits,
-                        maxBitsForCheck, maxChecksForBit, mapRows2Cols, mapCols2Rows, MAXITERATIONS,
-                        decision, estimates);
+    iters = ldpcDecoderWithInit (receivedSig, MAXITERATIONS, decision, estimates);
 
-    // iters = ldpcDecoderWithInit (receivedSig, MAXITERATIONS, decision, estimates);
-
-
-    // Record the stop event
     HANDLE_ERROR( cudaEventRecord(stop, NULL));
     HANDLE_ERROR( cudaEventSynchronize(stop));
     HANDLE_ERROR( cudaEventElapsedTime(&msecRecord, start, stop));
