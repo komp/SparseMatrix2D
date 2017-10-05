@@ -3,7 +3,8 @@
 // It also generates a HardDecision copy of that output matrix checkRows.
 __global__ void
 copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
-                       unsigned int *hd,
+                       // argument no longer used.
+                       //                       unsigned int *hd,
                        unsigned int numBits, unsigned int maxChecksForBit) {
   // index
   unsigned int m, n;
@@ -21,7 +22,8 @@ copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
       cellIndex = thisRowStart + m;
       oneDindex = map[cellIndex];
       checkRows[oneDindex] = thisBitEstimate;
-      hd[oneDindex] = (thisBitEstimate >= 0) ? 1 : 0;
+      // no longer used.
+      //      hd[oneDindex] = (thisBitEstimate >= 0) ? 1 : 0;
     }
   }
 }

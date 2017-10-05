@@ -14,7 +14,8 @@
 //  the loop body in a if (n < thisRowLength) ...
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
-                                 float *lambdaByCheckIndex, float *eta) {
+                                 float *lambdaByCheckIndex, float *eta, unsigned int* mapRows2Cols,
+                                 float *etaByBitIndex) {
 
   unsigned int m, n;
   unsigned int thisRowLength, thisRowStart, currentIndex;
@@ -48,6 +49,7 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
       value = (value > MAX_ETA)? MAX_ETA : value;
       value = (value < -MAX_ETA)? -MAX_ETA : value;
       eta[currentIndex] =  value;
+      etaByBitIndex[ mapRows2Cols[currentIndex] ] = value;
     }
   }
 }

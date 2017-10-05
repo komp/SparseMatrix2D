@@ -4,7 +4,8 @@ checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck
                             float *lambdaByCheckIndex, float *eta);
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
-                                 float *lambdaByCheckIndex, float *eta);
+                                 float *lambdaByCheckIndex, float *eta,
+                                 unsigned int* mapRows2Cols, float *etaByBitIndex);
 
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -17,8 +18,8 @@ __global__ void
 checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsForCheck,
                                  float *lambdaByCheckIndex, float *eta);
 __global__ void
-bitEstimates(float *rSig, float *etaByBitIndex, float *lambda,
-             unsigned int numBits, unsigned int maxChecksForBit);
+bitEstimates(float *rSig, float *etaByBitIndex, float *lambdaByCheckIndex, unsigned int *hd,
+             unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit);
 
 __global__ void
 transposeRC (unsigned int* map, float *checkRows, float *bitRows,
@@ -26,7 +27,6 @@ transposeRC (unsigned int* map, float *checkRows, float *bitRows,
 
 __global__ void
 copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
-                       unsigned int *hd,
                        unsigned int numBits, unsigned int maxChecksForBit);
 
 __global__ void

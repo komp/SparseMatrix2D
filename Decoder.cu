@@ -11,7 +11,7 @@
 
 #include "cub.cuh"
 
-#define NTHREADS   16
+#define NTHREADS   32
 #define CNP_THREADS   20  // checkNodeProcessing threads
 
 unsigned int numBits, numChecks;
@@ -123,19 +123,19 @@ int ldpcDecoderWithInit (float *rSig, unsigned int  maxIterations, unsigned int 
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
-  copyBitsToCheckmatrix<<<numBits,16>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex,
-                                        dev_cHat, numBits, maxChecksForBit);
+  copyBitsToCheckmatrix<<<numBits,16>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksForBit);
 
   ////////////////////////////////////////////////////////////////////////////
   // Main iteration loop
   ////////////////////////////////////////////////////////////////////////////
 
   for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
-    checkNodeProcessingOptimalBlock <<<numChecks, 32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta);
-    transposeRC<<<(numChecks),32>>>(dev_mapRC, dev_eta, dev_etaByBitIndex, numChecks, maxBitsForCheck);
-    bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambda, numBits,maxChecksForBit);
-    copyBitsToCheckmatrix<<<numBits,16>>>(dev_mapCR, dev_lambda, dev_lambdaByCheckIndex,
-                                          dev_cHat, numBits, maxChecksForBit);
+    checkNodeProcessingOptimalBlock <<<numChecks, 32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta,
+                                                        dev_mapRC, dev_etaByBitIndex);
+
+      bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambdaByCheckIndex, dev_cHat,
+                                                     dev_mapCR, numBits,maxChecksForBit);
+
     calcParityBits <<<numChecks, 2>>>(dev_cHat, dev_parityBits, numChecks, maxBitsForCheck);
     cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
     HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));

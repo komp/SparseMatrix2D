@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <chrono>
+
 #include "GPUincludes.h"
 #include "LDPC.h"
 
@@ -11,6 +13,13 @@
 #define MAXITERATIONS  60
 
 int main (int argc, char **argv) {
+
+  using clock = std::chrono::steady_clock;
+
+  clock::time_point startTime;
+  clock::time_point endTime;
+  clock::duration oneTime;
+  clock::duration allTime;
 
   unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit;
   unsigned int  *mapRows2Cols, *mapCols2Rows;
@@ -118,14 +127,6 @@ int main (int argc, char **argv) {
   unsigned int successes = 0;
   unsigned int iterationSum = 0;
 
-  // Allocate CUDA events that we'll use for timing
-  cudaEvent_t start;
-  HANDLE_ERROR(cudaEventCreate(&start));
-  cudaEvent_t stop;
-  HANDLE_ERROR(cudaEventCreate(&stop));
-  float msecRecord = 0.0f;
-  float msecTotal = 0.0f;
-
   int itersHistory[HISTORY_LENGTH+1];
   int iters;
 
@@ -137,6 +138,10 @@ int main (int argc, char **argv) {
   infoWord = (unsigned int *)malloc(infoLeng * sizeof(unsigned int));
   codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
+
+  // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
+  startTime = clock::now();
+  allTime = startTime - startTime;
 
   initLdpcDecoder (numChecks, numBits, maxBitsForCheck, maxChecksForBit,
                    mapRows2Cols, mapCols2Rows);
@@ -163,22 +168,21 @@ int main (int argc, char **argv) {
     for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
 
     // Finally, ready to decode signal
-    HANDLE_ERROR(cudaEventRecord(start, NULL));
 
+    startTime = clock::now();
     iters = ldpcDecoderWithInit (receivedSig, MAXITERATIONS, decision, estimates);
-
-    HANDLE_ERROR( cudaEventRecord(stop, NULL));
-    HANDLE_ERROR( cudaEventSynchronize(stop));
-    HANDLE_ERROR( cudaEventElapsedTime(&msecRecord, start, stop));
-    msecTotal += msecRecord;
+    endTime = clock::now();
+    oneTime = endTime - startTime;
+    allTime = allTime + oneTime;
 
     if (iters < MAXITERATIONS) {successes++;}
     iterationSum = iterationSum + iters;
     if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
-    if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%.0f msec).\n", successes, i, msecTotal);
+    if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%i msec).\n",
+                              successes, i, std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count());
   }
 
-  printf("%.0f msec to decode %i packets.\n", msecTotal, how_many);
+  printf("%i msec to decode %i packets.\n", std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(), how_many);
 
   printf(" %i Successes out of %i inputs.\n", successes, how_many);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
