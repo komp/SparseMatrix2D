@@ -116,7 +116,7 @@ int main (int argc, char **argv) {
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
   printf("infoLeng = %i, numParityBits = %i (%i), numBits = %i\n",
          infoLeng, numParityBits, infoLeng + numParityBits, numBits);
-  printf("%i %i\n", maxChecksForBit, maxBitsForCheck);
+  printf("maxChecksForBit = %i maxBitsForCheck = %i\n", maxChecksForBit, maxBitsForCheck);
   printf("ebn0 = %f, sigma = %f\n", ebno, sigma2);
 
   // ///////////////////////////////////////////
