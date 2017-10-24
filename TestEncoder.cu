@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <chrono>
+
 void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
                   unsigned int numMsgBits, unsigned int numRowsinRom, unsigned int numParBits,
                   unsigned int shiftRegLength,
@@ -13,7 +15,7 @@ int main (int argc, char **argv) {
 
   unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit;
   unsigned int  *mapRows2Cols, *mapCols2Rows;
-  unsigned int numRowsW, numColsW, numParityBits, shiftRegLength;
+  unsigned int numRowsW, numColsW, shiftRegLength;
   unsigned int *W_ROW_ROM;
 
   char mapFile[256];
@@ -21,6 +23,12 @@ int main (int argc, char **argv) {
   FILE *src;
   int errnum;
   unsigned int infoLeng, rnum, rdenom;
+
+  using clock = std::chrono::steady_clock;
+
+  clock::time_point startTime;
+  clock::time_point endTime;
+  clock::duration encoderTime;
 
   unsigned int  seed = 163331;
   /*  or use this to get a fresh sequence each time the program is run.
@@ -77,7 +85,6 @@ int main (int argc, char **argv) {
   fread(& shiftRegLength, sizeof(unsigned int), 1, src);
   W_ROW_ROM = (unsigned int*) malloc(numRowsW * numColsW * sizeof( unsigned int));
   fread(W_ROW_ROM, sizeof(unsigned int), numRowsW * numColsW, src);
-  numParityBits = numColsW;
   fclose(src);
 
   printf("parameters have been read.\n");
@@ -94,11 +101,20 @@ int main (int argc, char **argv) {
     for (unsigned int j=0; j < infoLeng; j++) {
       infoWord[j] = (0.5 >= rDist(generator))? 1:0;
     }
+    startTime = clock::now();
     ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+    endTime = clock::now();
+    encoderTime = endTime - startTime;
 
-    for (unsigned int j=0; j< numParityBits; j++) {
-      printf(" %i", codeWord[infoLeng+j]);
-      if ( (j % 40) == 39)  { printf("\n"); }
-    }
-    printf("\n");
+    printf("Time for encoder: %i microsec\n",
+           std::chrono::duration_cast<std::chrono::microseconds>(encoderTime).count());
+
+
+    // Debug.
+    // unsigned int numParityBits = numColsW;
+    // for (unsigned int j=0; j< numParityBits; j++) {
+    //   printf(" %i", codeWord[infoLeng+j]);
+    //   if ( (j % 40) == 39)  { printf("\n"); }
+    // }
+    // printf("\n");
 }
