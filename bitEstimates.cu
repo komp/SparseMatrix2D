@@ -3,20 +3,19 @@ bitEstimates(float *rSig, float *etaByBitIndex, float *lambdaByCheckIndex, unsig
              unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit) {
 
   unsigned int n;
-  unsigned int thisRowLength, thisRowStart;
-  unsigned cellIndex, oneDindex;
+  unsigned int thisRowLength, cellIndex;
+  unsigned oneDindex;
   unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
   if (tid < numBits) {
     n = tid;
     float sum = rSig[n];
-    thisRowStart = n*(maxChecksForBit+1);
-    thisRowLength = etaByBitIndex[thisRowStart];
+    thisRowLength = etaByBitIndex[n];
     for (unsigned int m=1; m<=thisRowLength; m++) {
-      sum = sum + etaByBitIndex[thisRowStart +m];
+      sum = sum + etaByBitIndex[m * numBits + n];
     }
     for (unsigned int m=1; m<=thisRowLength; m++) {
-      cellIndex = thisRowStart + m;
+      cellIndex = m * numBits + n;
       oneDindex = mapCols2Rows [cellIndex];
       lambdaByCheckIndex [oneDindex] = sum;
       hd[oneDindex] = (sum >= 0) ? 1 : 0;

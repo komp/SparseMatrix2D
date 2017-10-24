@@ -34,7 +34,7 @@ build: RunDecoder
 SOURCES := $(wildcard *.cu)
 ### OBJECTS := $(patsubst %.cu, %.o, $(SOURCES))
 OBJECTS := bitEstimates.o  cnpMinSumBlock.o  cnpOptimalBlock.o  cnpOptimal.o Decoder.o  \
-calcParityBits.o  cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o Encoder.o  RunDecoder.o  transposeRC.o
+calcParityBits.o  cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o Encoder.o  RunDecoder.o  transposeRC.o remapRows2Cols.o
 
 %.o: %.cu
 	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<

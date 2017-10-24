@@ -50,3 +50,11 @@ void initLdpcDecoder  (unsigned int numChecksI, unsigned int numBitsI,
                        unsigned int *mapRows2Cols, unsigned int *mapCols2Rows);
 
 int ldpcDecoderWithInit (float *rSig, unsigned int  maxIterations, unsigned int *decision, float *estimates);
+
+void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
+                     unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,
+                     unsigned int *r2c, unsigned int *newR2C);
+
+void remapCols2Rows (unsigned int numChecks, unsigned int numBits,
+                     unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,
+                     unsigned int *c2r, unsigned int *newC2R);

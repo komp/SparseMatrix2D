@@ -17,7 +17,7 @@
 unsigned int numBits, numChecks;
 unsigned int maxChecksForBit, maxBitsForCheck;
 
-  unsigned int nChecksByBits;
+unsigned int nChecksByBits;
 unsigned int nBitsByChecks;
 
 float *eta;
@@ -41,14 +41,14 @@ int* temp_storage=NULL;
 
 void initLdpcDecoder  (unsigned int numChecksI, unsigned int numBitsI,
                       unsigned int maxBitsForCheckI, unsigned int maxChecksForBitI,
-                      unsigned int *mapRows2Cols, unsigned int *mapCols2Rows) {
+                      unsigned int *mapRows2ColsI, unsigned int *mapCols2RowsI) {
 
-  unsigned int rowStart, rowLength;
-  // NOTE:  these two matrices are local, since the contents are written to device memory
-  // and never used again on the host side.
+  unsigned int *mapRows2Cols;
+  unsigned int *mapCols2Rows;
+
+  unsigned int numContributors;
   float *lambdaByCheckIndex;
   unsigned int *cHat;
-
 
   numBits = numBitsI;
   numChecks = numChecksI;
@@ -62,6 +62,18 @@ void initLdpcDecoder  (unsigned int numChecksI, unsigned int numBitsI,
   etaByBitIndex= (float *)malloc(nBitsByChecks* sizeof(float));
   lambdaByCheckIndex = (float *)malloc(nChecksByBits* sizeof(float));
   cHat = (unsigned int *)malloc(nChecksByBits* sizeof(unsigned int));
+
+
+  // Currently, mapRows2Cols and mapCols2Rows are provided in a row-based order.
+  // Each row of a matrix represents a check (or bit) node.
+  // In the "new" order, more appropriate for GPU striding, we use a column-based order.
+  // Ech column of a matrix represetns a check (or bit) node.
+  // So, here, I "transpose" these matrices.
+  mapRows2Cols = (unsigned int *) malloc(nChecksByBits * sizeof(unsigned int));
+  mapCols2Rows = (unsigned int *) malloc(nBitsByChecks * sizeof(unsigned int));
+
+  remapRows2Cols(numChecks, numBits, maxBitsForCheck, maxChecksForBit, mapRows2ColsI, mapRows2Cols);
+  remapCols2Rows(numChecks, numBits, maxBitsForCheck, maxChecksForBit, mapCols2RowsI, mapCols2Rows);
 
   // cudaMallocHost for paritySum ensures the value is in "pinned memory",
   // so the DeviceToHost transfer should be faster.
@@ -91,27 +103,25 @@ void initLdpcDecoder  (unsigned int numChecksI, unsigned int numBitsI,
   memset(etaByBitIndex, 0, nBitsByChecks*sizeof(etaByBitIndex[0]));
   memset(lambdaByCheckIndex, 0, nChecksByBits*sizeof(lambdaByCheckIndex[0]));
 
-  // Need to insert rowLengths into eta (and lambdaByCheckIndex)
-  // with rows corresponding to parity checks.
-  rowStart = 0;
+  // All matrices are stored in column order.
+  // For eta and lambdaByCheckIndex, each column represents a Check node.
+  // There are maxBitsForCheck+1 rows.
+  // row 0 always contains the number of contributors for this check node.
   for (unsigned int check=0; check<numChecks; check++) {
-    rowLength = mapRows2Cols[rowStart];
-    eta[rowStart] = (float)rowLength;
-    lambdaByCheckIndex[rowStart] = (float)rowLength;
-    cHat[rowStart] = rowLength;
-    rowStart = rowStart + (maxBitsForCheck+1);
+    numContributors = mapRows2Cols[check];
+    eta[check] = (float)numContributors;
+    lambdaByCheckIndex[check] = (float)numContributors;
+    cHat[check] = numContributors;
   }
-  // Need to the rowLengths in lambdaByCheckIndex and cHat into device memory, now.
+  // Need to have row 0 (see preceding code segment) in lambdaByCheckIndex and cHat into device memory, now.
   // For each new record, these device memory matrices are updated with a kernel
-  // (that expects these matrices to contain the rowLengths as the first element of each row.
   HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-  // Need to insert rowLengths into etaByBitIndex
-  rowStart = 0;
+  // For etaByBitIndex, each column corresponds to a bit node.
+  // row 0, contains the number of contributors for this bit.
   for (unsigned int bit=0; bit<numBits; bit++) {
-    etaByBitIndex[rowStart] = (float)mapCols2Rows[rowStart];
-    rowStart = rowStart + (maxChecksForBit+1);
+    etaByBitIndex[bit] = (float)mapCols2Rows[bit];
   }
 }
 
@@ -123,20 +133,21 @@ int ldpcDecoderWithInit (float *rSig, unsigned int  maxIterations, unsigned int 
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
-  copyBitsToCheckmatrix<<<numBits,16>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksForBit);
+  copyBitsToCheckmatrix<<<numBits, NTHREADS>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksForBit);
 
   ////////////////////////////////////////////////////////////////////////////
   // Main iteration loop
   ////////////////////////////////////////////////////////////////////////////
 
   for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
-    checkNodeProcessingOptimalBlock <<<numChecks, 32>>>(numChecks, maxBitsForCheck, dev_lambdaByCheckIndex, dev_eta,
-                                                        dev_mapRC, dev_etaByBitIndex);
+    checkNodeProcessingOptimalBlock <<<numChecks, NTHREADS>>>(numChecks, maxBitsForCheck,
+                                                              dev_lambdaByCheckIndex, dev_eta,
+                                                              dev_mapRC, dev_etaByBitIndex);
 
-      bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambdaByCheckIndex, dev_cHat,
-                                                     dev_mapCR, numBits,maxChecksForBit);
+    bitEstimates<<<(numBits)/NTHREADS+1,NTHREADS>>>(dev_rSig, dev_etaByBitIndex, dev_lambdaByCheckIndex, dev_cHat,
+                                                    dev_mapCR, numBits,maxChecksForBit);
 
-    calcParityBits <<<numChecks, 2>>>(dev_cHat, dev_parityBits, numChecks, maxBitsForCheck);
+    calcParityBits <<<numChecks/ NTHREADS+1 , NTHREADS>>>(dev_cHat, dev_parityBits, numChecks, maxBitsForCheck);
     cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
     HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));
     allChecksPassed =  (*paritySum == 0)? true : false;

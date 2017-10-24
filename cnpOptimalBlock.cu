@@ -18,7 +18,7 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
                                  float *etaByBitIndex) {
 
   unsigned int m, n;
-  unsigned int thisRowLength, thisRowStart, currentIndex;
+  unsigned int thisRowLength, currentIndex;
   float value;
 
   m = blockIdx.x;
@@ -26,11 +26,9 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
   if (m < numChecks) {
     __shared__ float rowVals[128];
 
-    thisRowStart = m * (maxBitsForCheck+1);
-    thisRowLength = eta[thisRowStart];
-
+    thisRowLength = eta[m];
     if (n <= thisRowLength) {
-      currentIndex = thisRowStart+n;
+      currentIndex = m + (n* numChecks);
       value =  tanhf ((eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0);
       if (value == 0.0) {value = MIN_TANH_MAGNITUDE;}
       rowVals[n] = value;
@@ -44,7 +42,6 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
       }
       __syncthreads();
 
-      currentIndex = thisRowStart+n;
       value = -2 *atanhf(rowVals[0]/rowVals[n]);
       value = (value > MAX_ETA)? MAX_ETA : value;
       value = (value < -MAX_ETA)? -MAX_ETA : value;
