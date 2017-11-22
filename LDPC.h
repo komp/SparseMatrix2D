@@ -1,3 +1,16 @@
+typedef struct{
+	unsigned int numBits;	     //!< Code length
+	unsigned int numChecks;       //!< Number of Parity-Check Bits (equivalently equations)
+	unsigned int maxChecksPerBit; //!< Maximum Bit Node Weight
+	unsigned int maxBitsPerCheck; //!< Maximum Check Node Weight
+	unsigned int *weightForBit;	 //!< Weight per Bit Node (redundant for regular LDPC codes)
+	unsigned int *weightForCheck; //!< Weight per Check Node (redundant for regular LDPC codes)
+	unsigned int *bitsForCheck;   //!< Indexes of Bit Nodes the Check Nodes are connected to
+	unsigned int *checksForBit;   //!< Indexes of Check Nodes the Bit Nodes are connected to
+	unsigned int *mapRows2Cols;   //!< Memory offsets LUT when Bit Nodes write to Check Nodes
+	unsigned int *mapCols2Rows;   //!< Memory offsets LUT when Check Nodes write to Bit Nodes
+} H_matrix;
+
 
 __global__ void
 checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -45,11 +58,11 @@ int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int *decision,
                  float *estimates);
 
-void initLdpcDecoder  (unsigned int numChecksI, unsigned int numBitsI,
-                       unsigned int maxBitsForCheckI, unsigned int maxChecksForBitI,
-                       unsigned int *mapRows2Cols, unsigned int *mapCols2Rows);
+int ReadAlistFile(H_matrix *hmat, const char *AlistFile);
 
-int ldpcDecoderWithInit (float *rSig, unsigned int  maxIterations, unsigned int *decision, float *estimates);
+void initLdpcDecoder  (H_matrix *hmat);
+
+int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIterations, unsigned int *decision, float *estimates);
 
 void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
                      unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,

@@ -21,12 +21,14 @@ int main (int argc, char **argv) {
   clock::duration oneTime;
   clock::duration allTime;
 
-  unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit;
-  unsigned int  *mapRows2Cols, *mapCols2Rows;
+  int status;
+  unsigned int numChecks, numBits;
   unsigned int numRowsW, numColsW, numParityBits, shiftRegLength;
   unsigned int *W_ROW_ROM;
 
-  char mapFile[256];
+  H_matrix *hmat = (H_matrix*) malloc(sizeof(H_matrix));
+
+  char H_Alist_File[256];
   char wROM_File[256];
   FILE *src;
   int errnum;
@@ -59,7 +61,7 @@ int main (int argc, char **argv) {
   rNominal = float(rnum)/float(rdenom);
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
-  sprintf(mapFile, "./G_and_H_Matrices/Maps_%d%d_%d.bin", rnum, rdenom, infoLeng);
+  sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.bin", rnum, rdenom, infoLeng);
 
 
@@ -70,36 +72,20 @@ int main (int argc, char **argv) {
   // When r is scaled by Lc it results in precisely scaled LLRs
   lc = 4/No;
 
-
-  src = fopen(mapFile, "r");
-  if (src == NULL) {
-    errnum = errno;
-    printf("Value of errno: %d\n", errnum);
-    perror("Error printed by perror");
-    printf("Error opening file %s\n", mapFile);
-    return(EXIT_FAILURE);
+  status = ReadAlistFile(hmat, H_Alist_File);
+  if ( status != 0) {
+    printf ("Unable to read alist file: %s\n", H_Alist_File);
+    exit(-1);
   }
-
-  fread(& numBits, sizeof(unsigned int), 1, src);
-  fread(& numChecks, sizeof(unsigned int), 1, src);
-  fread(& maxBitsForCheck, sizeof(unsigned int), 1, src);
-  fread(& maxChecksForBit, sizeof(unsigned int), 1, src);
-
-  // These maps have an extra column (+1),
-  // since each row begins with the actual length for the row.
-  mapCols2Rows = (unsigned int*) malloc(numBits * (maxChecksForBit +1) * sizeof( unsigned int));
-  mapRows2Cols = (unsigned int*) malloc(numChecks * (maxBitsForCheck +1) * sizeof( unsigned int));
-
-  fread(mapCols2Rows, sizeof(unsigned int), numBits* (maxChecksForBit+1), src);
-  fread(mapRows2Cols, sizeof(unsigned int), numChecks* (maxBitsForCheck+1), src);
-  fclose(src);
+  numBits = hmat->numBits;
+  numChecks = hmat->numChecks;
 
   src = fopen(wROM_File, "r");
   if (src == NULL) {
     errnum = errno;
     printf("Value of errno: %d\n", errnum);
     perror("Error printed by perror");
-    printf("Error opening file %s\n", mapFile);
+    printf("Error opening file %s\n", wROM_File);
     return(EXIT_FAILURE);
   }
 
@@ -116,7 +102,7 @@ int main (int argc, char **argv) {
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
   printf("infoLeng = %i, numParityBits = %i (%i), numBits = %i\n",
          infoLeng, numParityBits, infoLeng + numParityBits, numBits);
-  printf("maxChecksForBit = %i maxBitsForCheck = %i\n", maxChecksForBit, maxBitsForCheck);
+  printf("maxChecksPerBit = %i maxBitsPerCheck = %i\n", hmat->maxChecksPerBit, hmat->maxBitsPerCheck);
   printf("ebn0 = %f, sigma = %f\n", ebno, sigma2);
 
   // ///////////////////////////////////////////
@@ -143,8 +129,7 @@ int main (int argc, char **argv) {
   startTime = clock::now();
   allTime = startTime - startTime;
 
-  initLdpcDecoder (numChecks, numBits, maxBitsForCheck, maxChecksForBit,
-                   mapRows2Cols, mapCols2Rows);
+  initLdpcDecoder (hmat);
 
   for (unsigned int i=1; i<= how_many; i++) {
 
@@ -170,7 +155,7 @@ int main (int argc, char **argv) {
     // Finally, ready to decode signal
 
     startTime = clock::now();
-    iters = ldpcDecoderWithInit (receivedSig, MAXITERATIONS, decision, estimates);
+    iters = ldpcDecoderWithInit (hmat, receivedSig, MAXITERATIONS, decision, estimates);
     endTime = clock::now();
     oneTime = endTime - startTime;
     allTime = allTime + oneTime;
