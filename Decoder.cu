@@ -40,15 +40,14 @@ int* temp_storage=NULL;
 
 void initLdpcDecoder  (H_matrix *hmat) {
 
-  unsigned int *mapRows2Cols;
-  unsigned int *mapCols2Rows;
-
-  unsigned int numContributors;
-
+  unsigned int *mapRows2Cols = hmat->mapRows2Cols;
+  unsigned int *mapCols2Rows = hmat->mapCols2Rows;
   unsigned int numBits = hmat->numBits;
   unsigned int numChecks = hmat->numChecks;
   unsigned int maxBitsPerCheck = hmat->maxBitsPerCheck;
   unsigned int maxChecksPerBit = hmat->maxChecksPerBit;
+
+  unsigned int numContributors;
   unsigned int nChecksByBits = numChecks*(maxBitsPerCheck+1);
   unsigned int nBitsByChecks = numBits*(maxChecksPerBit+1);
 
@@ -56,20 +55,6 @@ void initLdpcDecoder  (H_matrix *hmat) {
   etaByBitIndex= (float *)malloc(nBitsByChecks* sizeof(float));
   lambdaByCheckIndex = (float *)malloc(nChecksByBits* sizeof(float));
   cHat = (unsigned int *)malloc(nChecksByBits* sizeof(unsigned int));
-
-
-  // Currently, mapRows2Cols and mapCols2Rows are provided in a row-based order.
-  // Each row of a matrix represents a check (or bit) node.
-  // In the "new" order, more appropriate for GPU striding, we use a column-based order.
-  // Ech column of a matrix represetns a check (or bit) node.
-  // So, here, I "transpose" these matrices.
-  mapRows2Cols = (unsigned int *) malloc(nChecksByBits * sizeof(unsigned int));
-  mapCols2Rows = (unsigned int *) malloc(nBitsByChecks * sizeof(unsigned int));
-
-  remapRows2Cols(numChecks, numBits, maxBitsPerCheck, maxChecksPerBit, hmat->mapRows2Cols, mapRows2Cols);
-  remapCols2Rows(numChecks, numBits, maxBitsPerCheck, maxChecksPerBit, hmat->mapCols2Rows, mapCols2Rows);
-  hmat->mapRows2Cols = mapRows2Cols;
-  hmat->mapCols2Rows = mapCols2Rows;
 
   // cudaMallocHost for paritySum ensures the value is in "pinned memory",
   // so the DeviceToHost transfer should be faster.

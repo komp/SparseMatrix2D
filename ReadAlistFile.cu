@@ -60,7 +60,7 @@ int ReadAlistFile(H_matrix *hmat, const char *AlistFile){
 
   for (unsigned int check = 0; check < numChecks; check++) {
     rowIndex = check * maxWeightForCheck;
-    mapRows2Cols[check * (maxWeightForCheck +1)] = weightForCheck[check];
+    mapRows2Cols[check] = weightForCheck[check];
     for(unsigned int j = 0; j < weightForCheck[check]; j++) {
       // WARNING:  we use 0-based indexing,
       // but the alist format uses 1-based indexes for bits and checks.
@@ -78,13 +78,13 @@ int ReadAlistFile(H_matrix *hmat, const char *AlistFile){
       }
       // '+1' is required, since the first element of each row in mapRows2Cols (mapCols2Rows)
       // contains the actual row length.
-      mapRows2Cols[check*(maxWeightForCheck +1)+1 + j] = bit*(maxWeightForBit+1)+1 + indexForCheck;
+      mapRows2Cols[(j+1)*numChecks + check] =  (indexForCheck+1)*numBits + bit;
     }
   }
 
   for (unsigned int bit = 0; bit < numBits; bit++) {
     rowIndex = bit * maxWeightForBit;
-    mapCols2Rows[bit * (maxWeightForBit +1)] = weightForBit[bit];
+    mapCols2Rows[bit] = weightForBit[bit];
     for(unsigned int j = 0; j < weightForBit[bit]; j++) {
       // WARNING:  we use 0-based indexing,
       // but the alist format uses 1-based indexes for bits and checks.
@@ -102,7 +102,7 @@ int ReadAlistFile(H_matrix *hmat, const char *AlistFile){
       }
       // '+1' is required, since the first element of each row in mapRows2Cols (mapCols2Rows)
       // contains the actual row length.
-      mapCols2Rows[bit*(maxWeightForBit+1)+1 + j] = check*(maxWeightForCheck +1)+1 + indexForBit;
+      mapCols2Rows[ (j+1)*numBits + bit] = (indexForBit+1)*numChecks + check;
     }
   }
   fclose(fd);
