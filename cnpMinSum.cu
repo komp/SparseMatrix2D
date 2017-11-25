@@ -11,7 +11,8 @@
 
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
-                           float *lambdaByCheckIndex, float *eta) {
+                           float *lambdaByCheckIndex, float *eta, unsigned int* mapRows2Cols,
+                           float *etaByBitIndex) {
   // edk  HACK
   // This was signs[maxBitsForCheck], which generates the error:
   // error: constant value is not known.
@@ -25,20 +26,19 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
   // index
   unsigned int m;
   unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  unsigned int thisRowLength, thisRowStart, currentIndex;
+  unsigned int thisRowLength, currentIndex;
 
   if (tid < numChecks) {
     m = tid;
-    thisRowStart = m * (maxBitsForCheck+1);
     // signs[n]  == 0  ==>  positive; 1  ==>  negative
     memset(signs, 0, (maxBitsForCheck+1)*sizeof(signs[0]));
     signProduct = 0;
     min1 = MAX_ETA;
     min2 =  MAX_ETA;
     minIndex = 1;
-    thisRowLength = eta[thisRowStart];
+    thisRowLength = (unsigned int) eta[m];
     for (unsigned int n=1; n<= thisRowLength ; n++) {
-      currentIndex = thisRowStart+n;
+      currentIndex = (n * numChecks) + m;
       value = eta[currentIndex] - lambdaByCheckIndex[currentIndex];
       signs[n] = (value < 0)? 1 : 0;
       signProduct = (signProduct != signs[n])? 1 : 0;
@@ -54,9 +54,11 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
     min1 = min1 * SCALE_FACTOR * (-1);
     min2 = min2 * SCALE_FACTOR * (-1);
     for (unsigned int n=1; n<= thisRowLength; n++) {
-      currentIndex = thisRowStart+n;
-      eta[currentIndex] =  (n == minIndex) ? min2 : min1;
-      if (signs[n] != signProduct) {eta[currentIndex] = -eta[currentIndex];}
+      currentIndex = (n * numChecks) + m;
+      value =  (n == minIndex) ? min2 : min1;
+      if (signs[n] != signProduct) {value = -value;}
+      eta[currentIndex] =  value;
+      etaByBitIndex[ mapRows2Cols[currentIndex] ] = value;
     }
   }
 }
