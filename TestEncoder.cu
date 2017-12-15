@@ -14,11 +14,10 @@ void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
 int main (int argc, char **argv) {
 
   unsigned int numChecks, numBits, maxBitsForCheck, maxChecksForBit;
-  unsigned int  *mapRows2Cols, *mapCols2Rows;
   unsigned int numRowsW, numColsW, shiftRegLength;
   unsigned int *W_ROW_ROM;
 
-  char mapFile[256];
+  char alistFile[256];
   char wROM_File[256];
   FILE *src;
   int errnum;
@@ -45,30 +44,22 @@ int main (int argc, char **argv) {
   infoLeng = atoi(argv[1]);
   rnum = atoi(argv[2]);
   rdenom = atoi(argv[3]);
-  sprintf(mapFile, "./G_and_H_Matrices/Maps_%d%d_%d.bin", rnum, rdenom, infoLeng);
+  sprintf(alistFile, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.bin", rnum, rdenom, infoLeng);
 
-  src = fopen(mapFile, "r");
+  src = fopen(alistFile, "r");
   if (src == NULL) {
     errnum = errno;
     printf("Value of errno: %d\n", errnum);
     perror("Error printed by perror");
-    printf("Error opening file %s\n", mapFile);
+    printf("Error opening file %s\n", alistFile);
     return(EXIT_FAILURE);
   }
 
-  fread(& numBits, sizeof(unsigned int), 1, src);
-  fread(& numChecks, sizeof(unsigned int), 1, src);
-  fread(& maxBitsForCheck, sizeof(unsigned int), 1, src);
-  fread(& maxChecksForBit, sizeof(unsigned int), 1, src);
-
-  // These maps have an extra column (+1),
-  // since each row begins with the actual length for the row.
-  mapCols2Rows = (unsigned int*) malloc(numBits * (maxChecksForBit +1) * sizeof( unsigned int));
-  mapRows2Cols = (unsigned int*) malloc(numChecks * (maxBitsForCheck +1) * sizeof( unsigned int));
-
-  fread(mapCols2Rows, sizeof(unsigned int), numBits* (maxChecksForBit+1), src);
-  fread(mapRows2Cols, sizeof(unsigned int), numChecks* (maxBitsForCheck+1), src);
+  fscanf(src,"%d", &numBits);
+  fscanf(src ,"%d", &numChecks);
+  fscanf(src,"%d", &maxChecksForBit);
+  fscanf(src,"%d", &maxBitsForCheck);
   fclose(src);
 
   src = fopen(wROM_File, "r");
@@ -76,7 +67,7 @@ int main (int argc, char **argv) {
     errnum = errno;
     printf("Value of errno: %d\n", errnum);
     perror("Error printed by perror");
-    printf("Error opening file %s\n", mapFile);
+    printf("Error opening file %s\n", wROM_File);
     return(EXIT_FAILURE);
   }
 
@@ -99,7 +90,8 @@ int main (int argc, char **argv) {
   codeWord = (unsigned int *)malloc(numBits * sizeof(unsigned int));
 
     for (unsigned int j=0; j < infoLeng; j++) {
-      infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+      //      infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+      infoWord[j] = j % 2;
     }
     startTime = clock::now();
     ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
@@ -108,6 +100,20 @@ int main (int argc, char **argv) {
 
     printf("Time for encoder: %i microsec\n",
            std::chrono::duration_cast<std::chrono::microseconds>(encoderTime).count());
+
+
+  char encodedFile[256];
+  sprintf(encodedFile, "./evenodd%d.encoded", numBits);
+  src = fopen(encodedFile, "w");
+  if (src == NULL) {
+    errnum = errno;
+    printf("Value of errno: %d\n", errnum);
+    perror("Error printed by perror");
+    printf("Error opening file %s\n", encodedFile);
+    return(EXIT_FAILURE);
+  }
+  for(unsigned int j=0; j<numBits; j++) fprintf(src,"%d\n", codeWord[j]);
+  fclose(src);
 
 
     // Debug.
