@@ -27,6 +27,7 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
   unsigned int m;
   unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
   unsigned int thisRowLength, currentIndex;
+  float values[7];
 
   if (tid < numChecks) {
     m = tid;
@@ -39,7 +40,8 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
     thisRowLength = (unsigned int) eta[m];
     for (unsigned int n=1; n<= thisRowLength ; n++) {
       currentIndex = (n * numChecks) + m;
-      value = eta[currentIndex] - lambdaByCheckIndex[currentIndex];
+      value = lambdaByCheckIndex[currentIndex];
+      values[n] = value;
       signs[n] = (value < 0)? 1 : 0;
       signProduct = (signProduct != signs[n])? 1 : 0;
       value = ABS(value);
@@ -51,14 +53,18 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
         min2 = value;
       }
     }
-    min1 = min1 * SCALE_FACTOR * (-1);
-    min2 = min2 * SCALE_FACTOR * (-1);
+    if (m < 1) printf ("Check %i: %.1f %.1f %.1f %.1f %.1f %.1f\n",m, values[1],values[2], values[3], values[4], values[5], values[6]);
+    //    min1 = min1 * SCALE_FACTOR;
+    //    min2 = min2 * SCALE_FACTOR;
     for (unsigned int n=1; n<= thisRowLength; n++) {
       currentIndex = (n * numChecks) + m;
       value =  (n == minIndex) ? min2 : min1;
       if (signs[n] != signProduct) {value = -value;}
+      values[n] = value;
       eta[currentIndex] =  value;
       etaByBitIndex[ mapRows2Cols[currentIndex] ] = value;
     }
+    if (m < 1) printf ("PostCheck %i: %.1f %.1f %.1f %.1f %.1f %.1f\n",m, values[1],values[2], values[3], values[4], values[5], values[6]);
+
   }
 }

@@ -9,7 +9,7 @@ NVCC          := $(CUDA_PATH)/bin/nvcc -ccbin $(HOST_COMPILER)
 # SMS ?= 30 35 37 50 52 60
 #  Note:  tesla requires 20 (which is now deprecated by NVIDIA)
 #  37  is best fit for K-80 chips
-SMS ?= 30 35 37 50 52 60
+SMS = 37
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
 # internal flags
@@ -54,6 +54,12 @@ TestEncoder.o: TestEncoder.cu
 	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
 TestEncoder: Encoder.o TestEncoder.o
 	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
+
+Test252.o: Test252.cu
+	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
+Test252: Test252.o ReadAlistFile.o
+	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
+
 
 clean:
 	rm -f RunDecoder $(OBJECTS)

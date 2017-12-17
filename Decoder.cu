@@ -128,7 +128,10 @@ int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIteration
   ////////////////////////////////////////////////////////////////////////////
 
   for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
-    checkNodeProcessingOptimalBlock <<<numChecks, NTHREADS>>>(numChecks, maxBitsPerCheck,
+    // checkNodeProcessingOptimalBlock <<<numChecks, NTHREADS>>>(numChecks, maxBitsPerCheck,
+    //                                                           dev_lambdaByCheckIndex, dev_eta,
+    //                                                           dev_mapRC, dev_etaByBitIndex);
+    checkNodeProcessingMinSum <<<numChecks, NTHREADS>>>(numChecks, maxBitsPerCheck,
                                                               dev_lambdaByCheckIndex, dev_eta,
                                                               dev_mapRC, dev_etaByBitIndex);
 

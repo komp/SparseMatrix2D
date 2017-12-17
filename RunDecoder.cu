@@ -61,9 +61,9 @@ int main (int argc, char **argv) {
   rNominal = float(rnum)/float(rdenom);
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
+
   sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.bin", rnum, rdenom, infoLeng);
-
 
   // Noise variance and log-likelihood ratio (LLR) scale factor. Because
   // Ec = R*Eb is unity (i.e. we transmit +1's and -1's), then No = 1/(R*EbNo).
@@ -71,6 +71,8 @@ int main (int argc, char **argv) {
   sigma2 = No/2;
   // When r is scaled by Lc it results in precisely scaled LLRs
   lc = 4/No;
+
+  printf("\nrNominal %f , sigma2 %f, No %f, lc %f\n", rNominal, sigma2, No, lc);
 
   status = ReadAlistFile(hmat, H_Alist_File);
   if ( status != 0) {
@@ -96,7 +98,6 @@ int main (int argc, char **argv) {
   fread(W_ROW_ROM, sizeof(unsigned int), numRowsW * numColsW, src);
   numParityBits = numColsW;
   fclose(src);
-
 
   printf("parameters have been read.\n");
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
@@ -133,19 +134,49 @@ int main (int argc, char **argv) {
 
   for (unsigned int i=1; i<= how_many; i++) {
 
-    for (unsigned int j=0; j < infoLeng; j++) {
-      infoWord[j] = (0.5 >= rDist(generator))? 1:0;
-    }
+    //    for (unsigned int j=0; j < infoLeng; j++) {
+    //      infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+    //    }
 
-    ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+    if (0) {
+      const char *sigFile = "./evenodd.sig";
+      src = fopen(sigFile, "r");
+      if (src == NULL) {
+        printf ("Unable to open encoded signal file: %s\n", sigFile);
+        exit(-1);
+      }
+      int ivalue;
+      for (unsigned int locali=0; locali<infoLeng+numParityBits; locali++) {
+        fscanf(src,"%d", &ivalue);
+        receivedSig[locali] = (float)ivalue;
+      }
+      fclose(src);
 
-    // Modulate the codeWord, and add noise
-    for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
-      s     = 2*float(codeWord[j]) - 1;
-      // AWGN channel
-      noise = sqrt(sigma2) * normDist(generator);
-      // When r is scaled by Lc it results in precisely scaled LLRs
-      receivedSig[j]  = lc*(s + noise);
+    } else {
+      // Here we read a single encoded packet, since we do not yet have
+      // an encoder for the code.
+      //    ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+
+      // const char *encodedFile = "./evenodd.encoded";
+      // src = fopen(encodedFile, "r");
+      // infoLeng = 252;
+      // numParityBits = 252;
+      // if (src == NULL) {
+      //   printf ("Unable to open encoded signal file: %s\n", encodedFile);
+      //   exit(-1);
+      // }
+
+
+      // Modulate the codeWord, and add noise
+      for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
+        s     = 2*float(codeWord[j]) - 1;
+        //edk  No noise for now.
+        // // AWGN channel
+        // noise = sqrt(sigma2) * normDist(generator);
+        // // When r is scaled by Lc it results in precisely scaled LLRs
+        // receivedSig[j]  = lc*(s + noise);
+        receivedSig[j]  = 20.0 * s;
+      }
     }
 
     // The LDPC codes are punctured, so the r we feed to the decoder is
