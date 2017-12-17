@@ -62,7 +62,7 @@ int main (int argc, char **argv) {
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
   sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
-  sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.bin", rnum, rdenom, infoLeng);
+  sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.binary", rnum, rdenom, infoLeng);
 
 
   // Noise variance and log-likelihood ratio (LLR) scale factor. Because
