@@ -172,3 +172,35 @@ numBits = 1408, numChecks = 384
  947 Successes out of 1000 inputs.
  27840 cumulative iterations, or about 27.8 per packet.
 Number of iterations for the first few packets:   16 11 12 17 11 8 17 17 11 13 12 13 13 13 12 10 27 28 15 12
+
+================
+December 18.  Baseline
+================
+
+kepler [1]% cd SparseMatrix2D
+kepler [2]% ./RunDecoder 1024 4 5 3.0 10000
+parameters have been read.
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.000000, sigma = 0.313242
+ 928 Successes out of 1000 inputs (1485 msec).
+ 1858 Successes out of 2000 inputs (2945 msec).
+ 2777 Successes out of 3000 inputs (4418 msec).
+ 3700 Successes out of 4000 inputs (5932 msec).
+ 4632 Successes out of 5000 inputs (7403 msec).
+ 5547 Successes out of 6000 inputs (8942 msec).
+ 6481 Successes out of 7000 inputs (10407 msec).
+ 7406 Successes out of 8000 inputs (11904 msec).
+ 8342 Successes out of 9000 inputs (13372 msec).
+ 9273 Successes out of 10000 inputs (14854 msec).
+14854 msec to decode 10000 packets.
+ 9273 Successes out of 10000 inputs.
+ 191189 cumulative iterations, or about 19.1 per packet.
+Number of iterations for the first few packets:   26 15 15 15 8 10 16 14 19 61 15 26 13 10 18 12 14 21 49 25
+
+
+#pragma unroll (6)  Does not appear to improve performance (in bitEstimates or cnpOptimalBlock)
+
+also
+using #define loop bound, and inner IF statement does not help performance.

@@ -45,7 +45,7 @@ int main (int argc, char **argv) {
   rnum = atoi(argv[2]);
   rdenom = atoi(argv[3]);
   sprintf(alistFile, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
-  sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.bin", rnum, rdenom, infoLeng);
+  sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.binary", rnum, rdenom, infoLeng);
 
   src = fopen(alistFile, "r");
   if (src == NULL) {

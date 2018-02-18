@@ -9,6 +9,7 @@ NVCC          := $(CUDA_PATH)/bin/nvcc -ccbin $(HOST_COMPILER)
 # SMS ?= 30 35 37 50 52 60
 #  Note:  tesla requires 20 (which is now deprecated by NVIDIA)
 #  37  is best fit for K-80 chips
+SMS = 37
 SMS ?= 30 35 37 50 52 60
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
@@ -17,7 +18,7 @@ CCFLAGS     := -std=c++11
 LDFLAGS     :=
 
 #  CUB library has some very useful utilities
-NVCC_FLAGS   := -std=c++11 -m64 -Wno-deprecated-gpu-targets $(GENCODE_FLAGS) -I/home/komp/GPU_codeFragments/cub/cub --generate-line-info -O2
+NVCC_FLAGS   := -std=c++11 -m64 $(GENCODE_FLAGS) -I/home/komp/GPU_codeFragments/cub/cub --generate-line-info -O2 --use_fast_math
 NVCC_INCLUDES := -I$(CUDA_PATH)/samples/common/inc
 NVCC_LIBRARIES :=
 
@@ -35,6 +36,9 @@ SOURCES := $(wildcard *.cu)
 ### OBJECTS := $(patsubst %.cu, %.o, $(SOURCES))
 OBJECTS := bitEstimates.o  cnpMinSumBlock.o  cnpOptimalBlock.o  cnpOptimal.o Decoder.o \
 calcParityBits.o  cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o Encoder.o  RunDecoder.o  transposeRC.o ReadAlistFile.o
+
+%.ptx: %.cu
+	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -ptx -src-in-ptx -c $<
 
 %.o: %.cu
 	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<

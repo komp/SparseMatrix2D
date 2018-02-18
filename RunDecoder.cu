@@ -10,7 +10,6 @@
 #include "LDPC.h"
 
 #define HISTORY_LENGTH  20
-#define MAXITERATIONS  60
 
 int main (int argc, char **argv) {
 
@@ -28,6 +27,7 @@ int main (int argc, char **argv) {
 
   H_matrix *hmat = (H_matrix*) malloc(sizeof(H_matrix));
 
+  int MAXITERATIONS;
   char H_Alist_File[256];
   char wROM_File[256];
   FILE *src;
@@ -51,8 +51,8 @@ int main (int argc, char **argv) {
   std::normal_distribution<float> normDist(0.0, 1.0);
 
 
-  if (argc < 6) {
-    printf("usage:  RunDecoder <infoLength> <r-numerator> <r-denominator> <ebno> <numpackets>\n" );
+  if (argc < 7) {
+    printf("usage:  RunDecoder <infoLength> <r-numerator> <r-denominator> <ebno> <numpackets> <maxIterations>\n" );
     exit(-1);
   }
   infoLeng = atoi(argv[1]);
@@ -61,6 +61,7 @@ int main (int argc, char **argv) {
   rNominal = float(rnum)/float(rdenom);
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
+  MAXITERATIONS = atoi(argv[6]);
   sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.binary", rnum, rdenom, infoLeng);
 
@@ -131,12 +132,22 @@ int main (int argc, char **argv) {
 
   initLdpcDecoder (hmat);
 
+  FILE *fd;
+  fd = fopen("./evenodd1408.encoded" , "r");
+  if (fd == NULL) {
+    printf("Error opening file %s\n", "./evenodd1408.encoded");
+    return(-1);
+  }
+  for (int i=0; i< numBits; i++) fscanf(fd, "%d", &codeWord[i]);
+  fclose(fd);
+
   for (unsigned int i=1; i<= how_many; i++) {
 
     for (unsigned int j=0; j < infoLeng; j++) {
       infoWord[j] = (0.5 >= rDist(generator))? 1:0;
     }
-
+    //edk  when commented, this implies we are using a "standard" infoWord
+    //edk  of alternating 0/1.
     ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
 
     // Modulate the codeWord, and add noise
@@ -151,6 +162,14 @@ int main (int argc, char **argv) {
     // The LDPC codes are punctured, so the r we feed to the decoder is
     // longer than the r we got from the channel. The punctured positions are filled in as zeros
     for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
+
+    fd = fopen("./evenodd1408.signal" , "w");
+    if (fd == NULL) {
+      printf("Error opening file %s\n", "./evenodd1408.signal");
+      return(-1);
+    }
+    for (int j=0; j< numBits; j++) fprintf(fd, "%.3f\n", receivedSig[j]);
+    fclose(fd);
 
     // Finally, ready to decode signal
 
