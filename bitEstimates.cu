@@ -12,7 +12,7 @@ bitEstimates(bundleElt *rSig, bundleElt *etaByBitIndex, bundleElt *lambdaByCheck
   if (tid < numBits) {
     n = tid;
     bundleElt sum = rSig[n];
-    thisRowLength = (int)etaByBitIndex[n].x;
+    thisRowLength = (int)ONEVAL(etaByBitIndex[n]);
 
     for (unsigned int m=1; m<=thisRowLength; m++) sum += etaByBitIndex[m * numBits + n];
 

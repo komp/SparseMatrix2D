@@ -8,7 +8,7 @@ calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, 
   bundleElt sum = makeBundleElt(0.0);
 
   if (m < numChecks) {
-    thisRowLength = (int)cHat[m].x;
+    thisRowLength = (int)ONEVAL(cHat[m]);
     for (unsigned int n=1; n<= thisRowLength ; n++) {
       sum.x += (cHat[n * numChecks + m].x >= 0) ? 1 : 0;
       sum.y += (cHat[n * numChecks + m].y >= 0) ? 1 : 0;
