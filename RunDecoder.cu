@@ -177,7 +177,7 @@ int main (int argc, char **argv) {
     allTime = allTime + oneTime;
 
     successes += (iters & 7);
-    iters = iters >> 3;
+    iters = iters >> 4;
     iterationSum = iterationSum + iters;
     if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
     if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%i msec).\n",

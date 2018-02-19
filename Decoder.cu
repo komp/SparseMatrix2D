@@ -140,17 +140,20 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
     calcParityBits <<<numChecks/ NTHREADS+1 , NTHREADS>>>(dev_cHat, dev_parityBits, numChecks, maxBitsPerCheck);
     cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
     HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));
-    allChecksPassed =  ((int)paritySum[0].s[0] == 0 &&
-                        (int)paritySum[0].s[1] == 0 &&
-                        (int)paritySum[0].s[2] == 0 &&
-                        (int)paritySum[0].s[3] == 0) ? true : false;
+    allChecksPassed = true;
+    for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) {
+      if ((int)paritySum[0].s[slot] != 0) {
+        allChecksPassed = false;
+        break;
+      }
+    }
     if (allChecksPassed) {break;}
   }
   // Return our best guess.
   // if iterCounter < maxIterations, then successful.
-  successCount = ((int)paritySum[0].s[0] == 0) + ((int)paritySum[0].s[1]  == 0) + ((int)paritySum[0].s[2] == 0) + ((int)paritySum[0].s[3] == 0);
-  returnVal = (iterCounter << 3) + successCount;
-//edk   HANDLE_ERROR(cudaMemcpy(estimates, dev_lambda, numBits * sizeof(bundleElt),cudaMemcpyDeviceToHost));
-//edk   for (unsigned int i=0; i<numBits; i++) decision[i] = estimates[i] > 0;
+  successCount = 0;
+  for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum[0].s[slot] == 0) successCount++;
+
+  returnVal = (iterCounter << 4) + successCount;
   return (returnVal);
 }

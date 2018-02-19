@@ -10,15 +10,11 @@ calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, 
   if (m < numChecks) {
     thisRowLength = (int)ONEVAL(cHat[m]);
     for (unsigned int n=1; n<= thisRowLength ; n++) {
-      sum.s[0] += (cHat[n * numChecks + m].s[0] >= 0) ? 1 : 0;
-      sum.s[1] += (cHat[n * numChecks + m].s[1] >= 0) ? 1 : 0;
-      sum.s[2] += (cHat[n * numChecks + m].s[2] >= 0) ? 1 : 0;
-      sum.s[3] += (cHat[n * numChecks + m].s[3] >= 0) ? 1 : 0;
+      for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if (cHat[n * numChecks + m].s[slot] >= 0) sum.s[slot]++;
     }
 
-    parityBits[m].s[0] = ((int)sum.s[0]) % 2;
-    parityBits[m].s[1] = ((int)sum.s[1]) % 2;
-    parityBits[m].s[2] = ((int)sum.s[2]) % 2;
-    parityBits[m].s[3] = ((int)sum.s[3]) % 2;
+    for (unsigned int n=1; n<= thisRowLength ; n++) {
+      for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) parityBits[m].s[slot] = ((int)sum.s[slot]) % 2;
+    }
   }
 }
