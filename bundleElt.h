@@ -86,9 +86,90 @@
 //  in the basic data structure used here, bundleElt,
 #define PKTS_PER_BUNDLE (SLOTS_PER_ELT * SAMPLES_PER_SLOT)
 
-typedef float4 bundleElt;
+struct __builtin_align__(16) localBE
+{
+    float s[SLOTS_PER_ELT];
+};
+typedef localBE bundleElt;
 
-#define makeBundleElt(x) make_float4(x)
+// typedef float4 bundleElt;
 
-#define ONEVAL(be)  (be).x
+#define makeBundleElt(x) ({x,x,x,x})
+
+static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x, float y, float z, float w)
+{
+    bundleElt t; t.s[0] = x; t.s[1] = y; t.s[2] = z; t.s[3] = w; return t;
+}
+static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x)
+{
+    bundleElt t; t.s[0] = x; t.s[1] = x; t.s[2] = x; t.s[3] = x; return t;
+}
+
+inline __host__ __device__ void operator+=(bundleElt &a, bundleElt b)
+{
+    a.s[0] += b.s[0];
+    a.s[1] += b.s[1];
+    a.s[2] += b.s[2];
+    a.s[3] += b.s[3];
+}
+inline __host__ __device__ void operator*=(bundleElt &a, bundleElt b)
+{
+    a.s[0] *= b.s[0];
+    a.s[1] *= b.s[1];
+    a.s[2] *= b.s[2];
+    a.s[3] *= b.s[3];
+}
+
+inline __host__ __device__ bundleElt operator+(bundleElt a, bundleElt b)
+{
+    bundleElt be;
+    be.s[0] = a.s[0] + b.s[0];
+    be.s[1] = a.s[1] + b.s[1];
+    be.s[2] = a.s[2] + b.s[2];
+    be.s[3] = a.s[3] + b.s[3];
+    return be;
+}
+inline __host__ __device__ bundleElt operator-(bundleElt a, bundleElt b)
+{
+    bundleElt be;
+    be.s[0] = a.s[0] - b.s[0];
+    be.s[1] = a.s[1] - b.s[1];
+    be.s[2] = a.s[2] - b.s[2];
+    be.s[3] = a.s[3] - b.s[3];
+    return be;
+}
+inline __host__ __device__ bundleElt operator*(bundleElt a, bundleElt b)
+{
+    bundleElt be;
+    be.s[0] = a.s[0] * b.s[0];
+    be.s[1] = a.s[1] * b.s[1];
+    be.s[2] = a.s[2] * b.s[2];
+    be.s[3] = a.s[3] * b.s[3];
+    return be;
+}
+inline __host__ __device__ bundleElt operator/(bundleElt a, bundleElt b)
+{
+    bundleElt be;
+    be.s[0] = a.s[0] / b.s[0];
+    be.s[1] = a.s[1] / b.s[1];
+    be.s[2] = a.s[2] / b.s[2];
+    be.s[3] = a.s[3] / b.s[3];
+    return be;
+}
+inline __host__ __device__ bundleElt operator/(bundleElt a, float b)
+{
+    bundleElt be;
+    be.s[0] = a.s[0] / b;
+    be.s[1] = a.s[1] / b;
+    be.s[2] = a.s[2] / b;
+    be.s[3] = a.s[3] / b;
+    return be;
+}
+
+inline __device__ __host__ bundleElt clamp(bundleElt v, float a, float b)
+{
+    return make_bundleElt(clamp(v.s[0], a, b), clamp(v.s[1], a, b), clamp(v.s[3], a, b), clamp(v.s[3], a, b));
+}
+
+#define ONEVAL(be)  (be).s[0]
 #endif

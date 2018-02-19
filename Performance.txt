@@ -232,3 +232,31 @@ ebn0 = 3.000000, sigma = 0.313242
  292523 cumulative iterations, or about 29.3 per packet.
 Number of iterations for the first few packets:   61 8 61 61 14 25 14 23 37 9 13 13 61 15 12 61
         61 29 12 11
+
+================
+February 19.  Initial implementation using bundleElt as s[4].
+Results are consistent with earlier work,
+This seems to be as fast (or a bit faster?) than float4,
+and provides more flexibility.
+Still have not yet investigated code optimization.
+================
+kepler [147]% ./RunDecoder 1024 4 5 3.0 10000 60
+parameters have been read.
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.000000, sigma = 0.313242
+ 3701 Successes out of 1000 inputs (2377 msec).
+ 7403 Successes out of 2000 inputs (4647 msec).
+ 11117 Successes out of 3000 inputs (6846 msec).
+ 14822 Successes out of 4000 inputs (9121 msec).
+ 18518 Successes out of 5000 inputs (11427 msec).
+ 22218 Successes out of 6000 inputs (13723 msec).
+ 25889 Successes out of 7000 inputs (16099 msec).
+ 29586 Successes out of 8000 inputs (18384 msec).
+ 33274 Successes out of 9000 inputs (20727 msec).
+ 36979 Successes out of 10000 inputs (23011 msec).
+23011 msec to decode 40000 packets.
+ 36979 Successes out of 40000 packets. (92.4%)
+ 295689 cumulative iterations, or about 29.6 per packet.
+Number of iterations for the first few packets:   61 15 15 15 8 10 16 61 61 61 15 26 61 10 18 12 14 21 61 25

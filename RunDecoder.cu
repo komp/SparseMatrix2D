@@ -165,16 +165,7 @@ int main (int argc, char **argv) {
       // longer than the r we got from the channel. The punctured positions are filled in as zeros
       for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
 
-      for (unsigned int j=0; j < numBits; j++ ) {
-        switch (slot) {
-        case 0 : receivedBundle[j].x = receivedSig[j]; break;
-        case 1 : receivedBundle[j].y = receivedSig[j]; break;
-        case 2 : receivedBundle[j].z = receivedSig[j]; break;
-        case 3 : receivedBundle[j].w = receivedSig[j]; break;
-        default: printf("Slot value (%d) is too large.\n", slot); exit (-1);
-        }
-      }
-
+      for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j]; break;
     }
 
     // Finally, ready to decode signal
