@@ -7,6 +7,7 @@
 // Helper functions and utilities to work with CUDA
 #include <helper_functions.h>
 #include <helper_cuda.h>
+#include <helper_math.h>
 
 // Thread block size
 #define BLOCK_SIZE 16

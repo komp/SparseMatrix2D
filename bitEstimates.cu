@@ -1,5 +1,7 @@
+#include "bundleElt.h"
+
 __global__ void
-bitEstimates(float *rSig, float *etaByBitIndex, float *lambdaByCheckIndex, unsigned int *hd,
+bitEstimates(bundleElt *rSig, bundleElt *etaByBitIndex, bundleElt *lambdaByCheckIndex, bundleElt *hd,
              unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit) {
 
   unsigned int n;
@@ -9,16 +11,17 @@ bitEstimates(float *rSig, float *etaByBitIndex, float *lambdaByCheckIndex, unsig
 
   if (tid < numBits) {
     n = tid;
-    float sum = rSig[n];
-    thisRowLength = etaByBitIndex[n];
-    for (unsigned int m=1; m<=thisRowLength; m++) {
-      sum = sum + etaByBitIndex[m * numBits + n];
-    }
+    bundleElt sum = rSig[n];
+    thisRowLength = (int)etaByBitIndex[n].x;
+
+    for (unsigned int m=1; m<=thisRowLength; m++) sum += etaByBitIndex[m * numBits + n];
+
     for (unsigned int m=1; m<=thisRowLength; m++) {
       cellIndex = m * numBits + n;
       oneDindex = mapCols2Rows [cellIndex];
       lambdaByCheckIndex [oneDindex] = sum;
-      hd[oneDindex] = (sum >= 0) ? 1 : 0;
+      //      hd[oneDindex] = (sum >= 0) ? 1 : 0;
+      hd[oneDindex] = sum;
     }
   }
 }

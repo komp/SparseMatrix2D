@@ -204,3 +204,31 @@ Number of iterations for the first few packets:   26 15 15 15 8 10 16 14 19 61 1
 
 also
 using #define loop bound, and inner IF statement does not help performance.
+
+================
+February 19.  Initial implementation using float4.
+Results are consistent with earlier work,
+and more than twice as fast.
+I have not yet investigated code optimization.
+================
+kepler [19]% ./RunDecoder 1024 4 5 3.0 10000 60
+parameters have been read.
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.000000, sigma = 0.313242
+ 3703 Successes out of 1000 inputs (2618 msec).
+ 7391 Successes out of 2000 inputs (5314 msec).
+ 11119 Successes out of 3000 inputs (7844 msec).
+ 14813 Successes out of 4000 inputs (10506 msec).
+ 18499 Successes out of 5000 inputs (13202 msec).
+ 22199 Successes out of 6000 inputs (15871 msec).
+ 25908 Successes out of 7000 inputs (18480 msec).
+ 29625 Successes out of 8000 inputs (21053 msec).
+ 33343 Successes out of 9000 inputs (23604 msec).
+ 37057 Successes out of 10000 inputs (26190 msec).
+26190 msec to decode 40000 packets.
+ 37057 Successes out of 40000 packets. (92.6%)
+ 292523 cumulative iterations, or about 29.3 per packet.
+Number of iterations for the first few packets:   61 8 61 61 14 25 14 23 37 9 13 13 61 15 12 61
+        61 29 12 11

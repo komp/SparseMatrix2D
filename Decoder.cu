@@ -17,20 +17,20 @@
 unsigned int nChecksByBits;
 unsigned int nBitsByChecks;
 
-float *eta;
-float *etaByBitIndex;
-float *lambdaByCheckIndex;
-unsigned int *cHat;
-unsigned int *paritySum;
+bundleElt *eta;
+bundleElt *etaByBitIndex;
+bundleElt *lambdaByCheckIndex;
+bundleElt *cHat;
+bundleElt *paritySum;
 
-float *dev_rSig;
-float *dev_eta;
-float *dev_lambda;
-float *dev_etaByBitIndex;
-float *dev_lambdaByCheckIndex;
-unsigned int *dev_cHat;
-unsigned int *dev_parityBits;
-unsigned int *dev_paritySum;
+bundleElt *dev_rSig;
+bundleElt *dev_eta;
+bundleElt *dev_lambda;
+bundleElt *dev_etaByBitIndex;
+bundleElt *dev_lambdaByCheckIndex;
+bundleElt *dev_cHat;
+bundleElt *dev_parityBits;
+bundleElt *dev_paritySum;
 
 unsigned int *dev_mapRC;
 unsigned int *dev_mapCR;
@@ -51,26 +51,26 @@ void initLdpcDecoder  (H_matrix *hmat) {
   unsigned int nChecksByBits = numChecks*(maxBitsPerCheck+1);
   unsigned int nBitsByChecks = numBits*(maxChecksPerBit+1);
 
-  eta = (float *)malloc(nChecksByBits* sizeof(float));
-  etaByBitIndex= (float *)malloc(nBitsByChecks* sizeof(float));
-  lambdaByCheckIndex = (float *)malloc(nChecksByBits* sizeof(float));
-  cHat = (unsigned int *)malloc(nChecksByBits* sizeof(unsigned int));
+  eta = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
+  etaByBitIndex= (bundleElt *)malloc(nBitsByChecks* sizeof(bundleElt));
+  lambdaByCheckIndex = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
+  cHat = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
 
   // cudaMallocHost for paritySum ensures the value is in "pinned memory",
   // so the DeviceToHost transfer should be faster.
   // Unfortunately, early tests show no improvement
-  HANDLE_ERROR( cudaMallocHost((void**)&paritySum, sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMallocHost((void**)&paritySum, sizeof(bundleElt)));
 
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(float) ));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(float)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(float)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_etaByBitIndex,  nBitsByChecks * sizeof(float)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambdaByCheckIndex, nChecksByBits * sizeof(float)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(bundleElt) ));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_etaByBitIndex,  nBitsByChecks * sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_lambdaByCheckIndex, nChecksByBits * sizeof(bundleElt)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_mapRC, nChecksByBits * sizeof(unsigned int)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_mapCR, nBitsByChecks * sizeof(unsigned int)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(unsigned int)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(unsigned int)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(unsigned int)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(bundleElt)));
 
   // Determine temporary device storage requirements for CUB reduce; and then allocate the space.
   cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
@@ -90,23 +90,23 @@ void initLdpcDecoder  (H_matrix *hmat) {
   // row 0 always contains the number of contributors for this check node.
   for (unsigned int check=0; check<numChecks; check++) {
     numContributors = mapRows2Cols[check];
-    eta[check] = (float)numContributors;
-    lambdaByCheckIndex[check] = (float)numContributors;
-    cHat[check] = numContributors;
+    eta[check] = makeBundleElt((float)numContributors);
+    lambdaByCheckIndex[check] = makeBundleElt((float)numContributors);
+    cHat[check] = makeBundleElt((float)numContributors);
   }
   // Need to have row 0 (see preceding code segment) in lambdaByCheckIndex and cHat into device memory, now.
   // For each new record, these device memory matrices are updated with a kernel
-  HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * sizeof(bundleElt), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(bundleElt), cudaMemcpyHostToDevice));
 
   // For etaByBitIndex, each column corresponds to a bit node.
   // row 0, contains the number of contributors for this bit.
   for (unsigned int bit=0; bit<numBits; bit++) {
-    etaByBitIndex[bit] = (float)mapCols2Rows[bit];
+    etaByBitIndex[bit] = makeBundleElt((float)mapCols2Rows[bit]);
   }
 }
 
-int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIterations, unsigned int *decision, float *estimates) {
+int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxIterations, unsigned int *decision, bundleElt *estimates) {
 
   unsigned int numBits = hmat->numBits;
   unsigned int numChecks = hmat->numChecks;
@@ -117,10 +117,12 @@ int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIteration
 
   unsigned int iterCounter;
   bool allChecksPassed = false;
+  unsigned int successCount;
+  unsigned int returnVal;
 
-  HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(float), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(float), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(float), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * sizeof(bundleElt), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * sizeof(bundleElt), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * sizeof(bundleElt), cudaMemcpyHostToDevice));
   copyBitsToCheckmatrix<<<numBits, NTHREADS>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksPerBit);
 
   ////////////////////////////////////////////////////////////////////////////
@@ -138,13 +140,17 @@ int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIteration
     calcParityBits <<<numChecks/ NTHREADS+1 , NTHREADS>>>(dev_cHat, dev_parityBits, numChecks, maxBitsPerCheck);
     cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
     HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));
-    allChecksPassed =  (*paritySum == 0)? true : false;
-
+    allChecksPassed =  ((int)paritySum[0].x == 0 &&
+                        (int)paritySum[0].y == 0 &&
+                        (int)paritySum[0].z == 0 &&
+                        (int)paritySum[0].w == 0) ? true : false;
     if (allChecksPassed) {break;}
   }
   // Return our best guess.
   // if iterCounter < maxIterations, then successful.
-  HANDLE_ERROR(cudaMemcpy(estimates, dev_lambda, numBits * sizeof(unsigned int),cudaMemcpyDeviceToHost));
-  for (unsigned int i=0; i<numBits; i++) decision[i] = estimates[i] > 0;
-  return (iterCounter);
+  successCount = ((int)paritySum[0].x == 0) + ((int)paritySum[0].y  == 0) + ((int)paritySum[0].z == 0) + ((int)paritySum[0].w == 0);
+  returnVal = (iterCounter << 3) + successCount;
+//edk   HANDLE_ERROR(cudaMemcpy(estimates, dev_lambda, numBits * sizeof(bundleElt),cudaMemcpyDeviceToHost));
+//edk   for (unsigned int i=0; i<numBits; i++) decision[i] = estimates[i] > 0;
+  return (returnVal);
 }

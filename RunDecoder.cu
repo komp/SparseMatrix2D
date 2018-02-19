@@ -27,7 +27,7 @@ int main (int argc, char **argv) {
 
   H_matrix *hmat = (H_matrix*) malloc(sizeof(H_matrix));
 
-  int MAXITERATIONS;
+  int maxIterations;
   char H_Alist_File[256];
   char wROM_File[256];
   FILE *src;
@@ -61,7 +61,7 @@ int main (int argc, char **argv) {
   rNominal = float(rnum)/float(rdenom);
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
-  MAXITERATIONS = atoi(argv[6]);
+  maxIterations = atoi(argv[6]);
   sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.binary", rnum, rdenom, infoLeng);
 
@@ -109,10 +109,11 @@ int main (int argc, char **argv) {
   // ///////////////////////////////////////////
 
   unsigned int decision[numBits];
-  float estimates[numBits];
+  bundleElt estimates[numBits];
 
   unsigned int successes = 0;
   unsigned int iterationSum = 0;
+  int totalPackets;
 
   int itersHistory[HISTORY_LENGTH+1];
   int iters;
@@ -121,10 +122,12 @@ int main (int argc, char **argv) {
   unsigned int* codeWord;
   float s, noise;
   float* receivedSig;
+  bundleElt* receivedBundle;
 
   infoWord = (unsigned int *)malloc(infoLeng * sizeof(unsigned int));
   codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
+  receivedBundle = (bundleElt *)malloc(numBits * sizeof(bundleElt));
 
   // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
   startTime = clock::now();
@@ -142,53 +145,58 @@ int main (int argc, char **argv) {
   fclose(fd);
 
   for (unsigned int i=1; i<= how_many; i++) {
+    for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
+      for (unsigned int j=0; j < infoLeng; j++) {
+        infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+      }
+      //edk  when commented, this implies we are using a "standard" infoWord
+      //edk  of alternating 0/1.
+      ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
 
-    for (unsigned int j=0; j < infoLeng; j++) {
-      infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+      // Modulate the codeWord, and add noise
+      for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
+        s     = 2*float(codeWord[j]) - 1;
+        // AWGN channel
+        noise = sqrt(sigma2) * normDist(generator);
+        // When r is scaled by Lc it results in precisely scaled LLRs
+        receivedSig[j]  = lc*(s + noise);
+      }
+      // The LDPC codes are punctured, so the r we feed to the decoder is
+      // longer than the r we got from the channel. The punctured positions are filled in as zeros
+      for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
+
+      for (unsigned int j=0; j < numBits; j++ ) {
+        switch (slot) {
+        case 0 : receivedBundle[j].x = receivedSig[j]; break;
+        case 1 : receivedBundle[j].y = receivedSig[j]; break;
+        case 2 : receivedBundle[j].z = receivedSig[j]; break;
+        case 3 : receivedBundle[j].w = receivedSig[j]; break;
+        default: printf("Slot value (%d) is too large.\n", slot); exit (-1);
+        }
+      }
+
     }
-    //edk  when commented, this implies we are using a "standard" infoWord
-    //edk  of alternating 0/1.
-    ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
-
-    // Modulate the codeWord, and add noise
-    for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
-      s     = 2*float(codeWord[j]) - 1;
-      // AWGN channel
-      noise = sqrt(sigma2) * normDist(generator);
-      // When r is scaled by Lc it results in precisely scaled LLRs
-      receivedSig[j]  = lc*(s + noise);
-    }
-
-    // The LDPC codes are punctured, so the r we feed to the decoder is
-    // longer than the r we got from the channel. The punctured positions are filled in as zeros
-    for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
-
-    fd = fopen("./evenodd1408.signal" , "w");
-    if (fd == NULL) {
-      printf("Error opening file %s\n", "./evenodd1408.signal");
-      return(-1);
-    }
-    for (int j=0; j< numBits; j++) fprintf(fd, "%.3f\n", receivedSig[j]);
-    fclose(fd);
 
     // Finally, ready to decode signal
 
     startTime = clock::now();
-    iters = ldpcDecoderWithInit (hmat, receivedSig, MAXITERATIONS, decision, estimates);
+    iters = ldpcDecoderWithInit (hmat, receivedBundle, maxIterations, decision, estimates);
     endTime = clock::now();
     oneTime = endTime - startTime;
     allTime = allTime + oneTime;
 
-    if (iters < MAXITERATIONS) {successes++;}
+    successes += (iters & 7);
+    iters = iters >> 3;
     iterationSum = iterationSum + iters;
     if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
     if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%i msec).\n",
                               successes, i, std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count());
   }
 
-  printf("%i msec to decode %i packets.\n", std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(), how_many);
+  totalPackets = SLOTS_PER_ELT * how_many;
+  printf("%i msec to decode %i packets.\n", std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(), totalPackets);
 
-  printf(" %i Successes out of %i inputs.\n", successes, how_many);
+  printf(" %i Successes out of %i packets. (%.1f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
   for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}

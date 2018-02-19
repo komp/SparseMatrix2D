@@ -1,3 +1,5 @@
+#include  "bundleElt.h"
+
 typedef struct{
 	unsigned int numBits;	     //!< Code length
 	unsigned int numChecks;       //!< Number of Parity-Check Bits (equivalently equations)
@@ -14,37 +16,37 @@ typedef struct{
 
 __global__ void
 checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
-                            float *lambdaByCheckIndex, float *eta);
+                            bundleElt *lambdaByCheckIndex, bundleElt *eta);
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
-                                 float *lambdaByCheckIndex, float *eta,
-                                 unsigned int* mapRows2Cols, float *etaByBitIndex);
+                                 bundleElt *lambdaByCheckIndex, bundleElt *eta,
+                                 unsigned int* mapRows2Cols, bundleElt *etaByBitIndex);
 
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
-                           float *lambdaByCheckIndex, float *eta,
-                           unsigned int* mapRows2Cols, float *etaByBitIndex);
+                           bundleElt *lambdaByCheckIndex, bundleElt *eta,
+                           unsigned int* mapRows2Cols, bundleElt *etaByBitIndex);
 
 __global__ void
 checkNodeProcessingMinSumBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
-                                float *lambdaByCheckIndex, float *eta);
+                                bundleElt *lambdaByCheckIndex, bundleElt *eta);
 __global__ void
 checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsForCheck,
-                                 float *lambdaByCheckIndex, float *eta);
+                                 bundleElt *lambdaByCheckIndex, bundleElt *eta);
 __global__ void
-bitEstimates(float *rSig, float *etaByBitIndex, float *lambdaByCheckIndex, unsigned int *hd,
+bitEstimates(bundleElt *rSig, bundleElt *etaByBitIndex, bundleElt *lambdaByCheckIndex, bundleElt *hd,
              unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit);
 
 __global__ void
-transposeRC (unsigned int* map, float *checkRows, float *bitRows,
+transposeRC (unsigned int* map, bundleElt *checkRows, bundleElt *bitRows,
              unsigned int numChecks, unsigned int maxBitsForCheck);
 
 __global__ void
-copyBitsToCheckmatrix (unsigned int* map, float *bitEstimates, float *checkRows,
+copyBitsToCheckmatrix (unsigned int* map, bundleElt *bitEstimates, bundleElt *checkRows,
                        unsigned int numBits, unsigned int maxChecksForBit);
 
 __global__ void
-calcParityBits (unsigned int* cHat, unsigned int *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck);
+calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck);
 
 
 void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
@@ -52,18 +54,18 @@ void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
                    unsigned int shiftRegLength,
                   unsigned int *codeWord);
 
-int ldpcDecoder (float *rSig, unsigned int numChecks, unsigned int numBits,
+int ldpcDecoder (bundleElt *rSig, unsigned int numChecks, unsigned int numBits,
                  unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
                  unsigned int *mapRows2Cols, unsigned int *mapCols2Rows,
                  unsigned int maxIterations,
                  unsigned int *decision,
-                 float *estimates);
+                 bundleElt *estimates);
 
 int ReadAlistFile(H_matrix *hmat, const char *AlistFile);
 
 void initLdpcDecoder  (H_matrix *hmat);
 
-int ldpcDecoderWithInit (H_matrix *hmat, float *rSig, unsigned int  maxIterations, unsigned int *decision, float *estimates);
+int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxIterations, unsigned int *decision, bundleElt *estimates);
 
 void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
                      unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,
