@@ -17,8 +17,7 @@ $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_
 CCFLAGS     := -std=c++11
 LDFLAGS     :=
 
-#  CUB library has some very useful utilities
-NVCC_FLAGS   := -std=c++11 -m64 $(GENCODE_FLAGS) -I/home/komp/GPU_codeFragments/cub/cub --generate-line-info -O2 --use_fast_math
+NVCC_FLAGS   := -std=c++11 -m64 $(GENCODE_FLAGS) --generate-line-info -O2 --use_fast_math
 NVCC_INCLUDES := -I$(CUDA_PATH)/samples/common/inc
 NVCC_LIBRARIES :=
 

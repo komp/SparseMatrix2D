@@ -9,8 +9,6 @@
 #include "GPUincludes.h"
 #include "LDPC.h"
 
-#include "cub.cuh"
-
 #define NTHREADS   32
 #define CNP_THREADS   20  // checkNodeProcessing threads
 
@@ -73,10 +71,6 @@ void initLdpcDecoder  (H_matrix *hmat) {
   HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(bundleElt)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(bundleElt)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(bundleElt)));
-
-  // Determine temporary device storage requirements for CUB reduce; and then allocate the space.
-  cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
-  HANDLE_ERROR(cudaMalloc(&temp_storage,temp_storage_bytes));
 
   HANDLE_ERROR(cudaMemcpy(dev_mapRC, mapRows2Cols, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
@@ -142,16 +136,19 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
     calcParityBits <<<numChecks/ NTHREADS+1 , NTHREADS>>>(dev_cHat, dev_parityBits, numChecks, maxBitsPerCheck);
     allChecksPassed = true;
 
-    // The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
-    cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
-    HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(bundleElt),cudaMemcpyDeviceToHost));
-
-    for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum[0].s[slot] != 0) allChecksPassed = false;
-
-    if (allChecksPassed) {break;}
+    //  The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
+    HANDLE_ERROR(cudaMemcpy(parityBits, dev_parityBits, numChecks*sizeof(bundleElt),cudaMemcpyDeviceToHost));
+    paritySum[0] = make_bundleElt(0.0);
+    for (unsigned int check=0; check < numChecks; check++) {
+      for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)parityBits[check].s[slot] != 0) allChecksPassed = false;
+      if (! allChecksPassed) break;
+    }
+    if (allChecksPassed) break;
   }
   // Return our best guess.
   // if iterCounter < maxIterations, then successful.
+  paritySum[0] = make_bundleElt(0.0);
+  for (unsigned int check=0; check < numChecks; check++) paritySum[0] += parityBits[check];
   successCount = 0;
   for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum[0].s[slot] == 0) successCount++;
 

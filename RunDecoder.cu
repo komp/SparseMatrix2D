@@ -19,6 +19,8 @@ int main (int argc, char **argv) {
   clock::time_point endTime;
   clock::duration oneTime;
   clock::duration allTime;
+  // for recording time spent encoding.
+  clock::duration allTimeE;
 
   int status;
   unsigned int numChecks, numBits;
@@ -133,6 +135,8 @@ int main (int argc, char **argv) {
   // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
   startTime = clock::now();
   allTime = startTime - startTime;
+  // timer for encoding.
+  allTimeE = allTime;
 
   initLdpcDecoder (hmat);
 
@@ -146,6 +150,7 @@ int main (int argc, char **argv) {
   fclose(fd);
 
   for (unsigned int i=1; i<= how_many; i++) {
+    startTime = clock::now();
     for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
       for (unsigned int j=0; j < infoLeng; j++) {
         infoWord[j] = (0.5 >= rDist(generator))? 1:0;
@@ -168,9 +173,11 @@ int main (int argc, char **argv) {
 
       for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j];
       }
+    endTime = clock::now();
+    oneTime = endTime - startTime;
+    allTimeE = allTimeE + oneTime;
 
     // Finally, ready to decode signal
-
     startTime = clock::now();
     iters = ldpcDecoderWithInit (hmat, receivedBundle, maxIterations, decision, estimates);
     endTime = clock::now();
@@ -186,8 +193,8 @@ int main (int argc, char **argv) {
   }
 
   totalPackets = SLOTS_PER_ELT * how_many;
-  printf("%i msec to decode %i packets.\n", std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(), totalPackets);
-
+  printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),totalPackets);
+  printf("%i msec to encode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTimeE).count(),totalPackets);
   printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
