@@ -21,6 +21,7 @@ bundleElt *eta;
 bundleElt *etaByBitIndex;
 bundleElt *lambdaByCheckIndex;
 bundleElt *cHat;
+bundleElt *parityBits;
 bundleElt *paritySum;
 
 bundleElt *dev_rSig;
@@ -55,6 +56,7 @@ void initLdpcDecoder  (H_matrix *hmat) {
   etaByBitIndex= (bundleElt *)malloc(nBitsByChecks* sizeof(bundleElt));
   lambdaByCheckIndex = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
   cHat = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
+  parityBits = (bundleElt *)malloc(numChecks * sizeof(bundleElt));
 
   // cudaMallocHost for paritySum ensures the value is in "pinned memory",
   // so the DeviceToHost transfer should be faster.
@@ -78,7 +80,7 @@ void initLdpcDecoder  (H_matrix *hmat) {
 
   HANDLE_ERROR(cudaMemcpy(dev_mapRC, mapRows2Cols, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
+  HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * sizeof(bundleElt), cudaMemcpyHostToDevice));
 
   memset(eta, 0, nChecksByBits*sizeof(eta[0]));
   memset(etaByBitIndex, 0, nBitsByChecks*sizeof(etaByBitIndex[0]));
@@ -138,15 +140,14 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
                                                     dev_mapCR, numBits,maxChecksPerBit);
 
     calcParityBits <<<numChecks/ NTHREADS+1 , NTHREADS>>>(dev_cHat, dev_parityBits, numChecks, maxBitsPerCheck);
-    cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
-    HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(int),cudaMemcpyDeviceToHost));
     allChecksPassed = true;
-    for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) {
-      if ((int)paritySum[0].s[slot] != 0) {
-        allChecksPassed = false;
-        break;
-      }
-    }
+
+    // The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
+    cub::DeviceReduce::Sum(temp_storage, temp_storage_bytes, dev_parityBits, dev_paritySum, numChecks);
+    HANDLE_ERROR(cudaMemcpy(paritySum,dev_paritySum,sizeof(bundleElt),cudaMemcpyDeviceToHost));
+
+    for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum[0].s[slot] != 0) allChecksPassed = false;
+
     if (allChecksPassed) {break;}
   }
   // Return our best guess.

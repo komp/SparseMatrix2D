@@ -100,6 +100,7 @@ int main (int argc, char **argv) {
 
 
   printf("parameters have been read.\n");
+  printf("SLOTS_PER_ELT = %d\n", SLOTS_PER_ELT);
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
   printf("infoLeng = %i, numParityBits = %i (%i), numBits = %i\n",
          infoLeng, numParityBits, infoLeng + numParityBits, numBits);
@@ -165,8 +166,8 @@ int main (int argc, char **argv) {
       // longer than the r we got from the channel. The punctured positions are filled in as zeros
       for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
 
-      for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j]; break;
-    }
+      for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j];
+      }
 
     // Finally, ready to decode signal
 
@@ -176,7 +177,7 @@ int main (int argc, char **argv) {
     oneTime = endTime - startTime;
     allTime = allTime + oneTime;
 
-    successes += (iters & 7);
+    successes += (iters & 15);
     iters = iters >> 4;
     iterationSum = iterationSum + iters;
     if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
@@ -187,7 +188,7 @@ int main (int argc, char **argv) {
   totalPackets = SLOTS_PER_ELT * how_many;
   printf("%i msec to decode %i packets.\n", std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(), totalPackets);
 
-  printf(" %i Successes out of %i packets. (%.1f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
+  printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
   for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}

@@ -9,7 +9,6 @@ void ldpcEncoder (unsigned int *messageBits, unsigned int* W_ROW_ROM,
                   unsigned int numParBits, unsigned int shiftRegLength,
                   unsigned int *codeWord)  {
   unsigned int parityBits[numParBits];
-  unsigned int numShiftRegs = numParBits/shiftRegLength;
   unsigned int cSR [numParBits];
   unsigned int msgPtr = 0;
   unsigned int wIndex;

@@ -206,57 +206,166 @@ also
 using #define loop bound, and inner IF statement does not help performance.
 
 ================
-February 19.  Initial implementation using float4.
-Results are consistent with earlier work,
-and more than twice as fast.
-I have not yet investigated code optimization.
+Baseline.  Using cnpOptimalBlock.
 ================
-kepler [19]% ./RunDecoder 1024 4 5 3.0 10000 60
+kepler [5]% ./RunDecoder 1024 4 5 3.0 10000 50
 parameters have been read.
 numBits = 1408, numChecks = 384
 infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
 maxChecksPerBit = 6 maxBitsPerCheck = 18
 ebn0 = 3.000000, sigma = 0.313242
- 3703 Successes out of 1000 inputs (2618 msec).
- 7391 Successes out of 2000 inputs (5314 msec).
- 11119 Successes out of 3000 inputs (7844 msec).
- 14813 Successes out of 4000 inputs (10506 msec).
- 18499 Successes out of 5000 inputs (13202 msec).
- 22199 Successes out of 6000 inputs (15871 msec).
- 25908 Successes out of 7000 inputs (18480 msec).
- 29625 Successes out of 8000 inputs (21053 msec).
- 33343 Successes out of 9000 inputs (23604 msec).
- 37057 Successes out of 10000 inputs (26190 msec).
-26190 msec to decode 40000 packets.
- 37057 Successes out of 40000 packets. (92.6%)
- 292523 cumulative iterations, or about 29.3 per packet.
-Number of iterations for the first few packets:   61 8 61 61 14 25 14 23 37 9 13 13 61 15 12 61
-        61 29 12 11
+ 923 Successes out of 1000 inputs (1432 msec).
+ 1845 Successes out of 2000 inputs (2844 msec).
+ 2758 Successes out of 3000 inputs (4261 msec).
+ 3674 Successes out of 4000 inputs (5723 msec).
+ 4594 Successes out of 5000 inputs (7146 msec).
+ 5498 Successes out of 6000 inputs (8623 msec).
+ 6423 Successes out of 7000 inputs (10042 msec).
+ 7342 Successes out of 8000 inputs (11486 msec).
+ 8273 Successes out of 9000 inputs (12912 msec).
+ 9198 Successes out of 10000 inputs (14345 msec).
+14345 msec to decode 10000 packets.
+ 9198 Successes out of 10000 inputs.
+ 183703 cumulative iterations, or about 18.4 per packet.
+Number of iterations for the first few packets:   26 15 15 15 8 10 16 14 19 51 15 26 13 10 18 12 14 21 49 25
+========
+Same using ebno = 3.5
+========
+kepler [6]% ./RunDecoder 1024 4 5 3.5 10000 50
+parameters have been read.
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.500000, sigma = 0.279177
+ 998 Successes out of 1000 inputs (778 msec).
+ 1996 Successes out of 2000 inputs (1550 msec).
+ 2993 Successes out of 3000 inputs (2331 msec).
+ 3989 Successes out of 4000 inputs (3120 msec).
+ 4988 Successes out of 5000 inputs (3882 msec).
+ 5986 Successes out of 6000 inputs (4675 msec).
+ 6985 Successes out of 7000 inputs (5446 msec).
+ 7983 Successes out of 8000 inputs (6218 msec).
+ 8980 Successes out of 9000 inputs (7000 msec).
+ 9976 Successes out of 10000 inputs (7783 msec).
+7783 msec to decode 10000 packets.
+ 9976 Successes out of 10000 inputs.
+ 95787 cumulative iterations, or about 9.6 per packet.
+Number of iterations for the first few packets:   11 10 10 9 6 7 10 9 11 24 9 8 9 8 11 8 11 13 12 9
 
 ================
-February 19.  Initial implementation using bundleElt as s[4].
+February 19.  Initial implementation using float4.
+Results are consistent with earlier work,
+and about twice as fast.
+I have not yet investigated code optimization.
+================
+February 21.  Initial implementation using bundleElt as s[4].
 Results are consistent with earlier work,
 This seems to be as fast (or a bit faster?) than float4,
 and provides more flexibility.
 Still have not yet investigated code optimization.
 ================
-kepler [147]% ./RunDecoder 1024 4 5 3.0 10000 60
+kepler [12]% ./RunDecoder 1024 4 5 3.0 10000 50
 parameters have been read.
+SLOTS_PER_ELT = 4
 numBits = 1408, numChecks = 384
 infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
 maxChecksPerBit = 6 maxBitsPerCheck = 18
 ebn0 = 3.000000, sigma = 0.313242
- 3701 Successes out of 1000 inputs (2377 msec).
- 7403 Successes out of 2000 inputs (4647 msec).
- 11117 Successes out of 3000 inputs (6846 msec).
- 14822 Successes out of 4000 inputs (9121 msec).
- 18518 Successes out of 5000 inputs (11427 msec).
- 22218 Successes out of 6000 inputs (13723 msec).
- 25889 Successes out of 7000 inputs (16099 msec).
- 29586 Successes out of 8000 inputs (18384 msec).
- 33274 Successes out of 9000 inputs (20727 msec).
- 36979 Successes out of 10000 inputs (23011 msec).
-23011 msec to decode 40000 packets.
- 36979 Successes out of 40000 packets. (92.4%)
- 295689 cumulative iterations, or about 29.6 per packet.
-Number of iterations for the first few packets:   61 15 15 15 8 10 16 61 61 61 15 26 61 10 18 12 14 21 61 25
+ 3940 Successes out of 1000 inputs (3054 msec).
+ 7871 Successes out of 2000 inputs (6140 msec).
+ 11810 Successes out of 3000 inputs (9117 msec).
+ 15745 Successes out of 4000 inputs (12232 msec).
+ 19680 Successes out of 5000 inputs (15262 msec).
+ 23604 Successes out of 6000 inputs (18460 msec).
+ 27548 Successes out of 7000 inputs (21430 msec).
+ 31473 Successes out of 8000 inputs (24584 msec).
+ 35401 Successes out of 9000 inputs (27703 msec).
+ 39320 Successes out of 10000 inputs (30901 msec).
+30901 msec to decode 40000 packets.
+ 39320 Successes out of 40000 packets. (98.3%)
+ 163970 cumulative iterations, or about 16.4 per packet.
+Number of iterations for the first few packets:   17 33 51 19 13 18 10 13 13 14 6 16 20 10 16 9 9 6 51 19
+
+======
+ebno = 3.5 (much faster)
+=====
+kepler [13]% ./RunDecoder 1024 4 5 3.5 10000 50
+parameters have been read.
+SLOTS_PER_ELT = 4
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.500000, sigma = 0.279177
+ 3999 Successes out of 1000 inputs (1734 msec).
+ 7997 Successes out of 2000 inputs (3453 msec).
+ 11995 Successes out of 3000 inputs (5153 msec).
+ 15994 Successes out of 4000 inputs (6881 msec).
+ 19994 Successes out of 5000 inputs (8603 msec).
+ 23994 Successes out of 6000 inputs (10306 msec).
+ 27992 Successes out of 7000 inputs (12033 msec).
+ 31991 Successes out of 8000 inputs (13726 msec).
+ 35990 Successes out of 9000 inputs (15406 msec).
+ 39990 Successes out of 10000 inputs (17053 msec).
+17053 msec to decode 40000 packets.
+ 39990 Successes out of 40000 packets. (100.0%)
+ 87124 cumulative iterations, or about 8.7 per packet.
+Number of iterations for the first few packets:   12 6 6 8 9 23 5 5 14 14 10 8 9 4 9 16 11 7 7 10
+
+================
+February 21.  bundleElt with s[1]
+functions as expected, AND is approximately as fast the
+original implementation simply using floats.
+
+================
+February 21.  Initial implementation using bundleElt as s[8].
+Very simple change.
+Results are consistent with earlier work,
+This s[8] is significantly faster than s[4]
+Still have not yet investigated code optimization.
+================
+./RunDecoder 1024 4 5 3.0 10000 50
+parameters have been read.
+SLOTS_PER_ELT = 8
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.000000, sigma = 0.313242
+ 7938 Successes out of 1000 inputs (4627 msec).
+ 15875 Successes out of 2000 inputs (9184 msec).
+ 23787 Successes out of 3000 inputs (14143 msec).
+ 31717 Successes out of 4000 inputs (18814 msec).
+ 39646 Successes out of 5000 inputs (23507 msec).
+ 47577 Successes out of 6000 inputs (28214 msec).
+ 55515 Successes out of 7000 inputs (32907 msec).
+ 63449 Successes out of 8000 inputs (37590 msec).
+ 71384 Successes out of 9000 inputs (42219 msec).
+ 79329 Successes out of 10000 inputs (46753 msec).
+46753 msec to decode 80000 packets.
+ 79329 Successes out of 80000 packets. (99.2%)
+ 163901 cumulative iterations, or about 16.4 per packet.
+Number of iterations for the first few packets:   19 39 10 36 27 17 10 11 51 18 11 6 11 8 13 9 6 27 7 12
+
+======
+ebno = 3.5
+======
+./RunDecoder 1024 4 5 3.5 10000 50
+parameters have been read.
+SLOTS_PER_ELT = 8
+numBits = 1408, numChecks = 384
+infoLeng = 1024, numParityBits = 256 (1280), numBits = 1408
+maxChecksPerBit = 6 maxBitsPerCheck = 18
+ebn0 = 3.500000, sigma = 0.279177
+ 7997 Successes out of 1000 inputs (2644 msec).
+ 15996 Successes out of 2000 inputs (5267 msec).
+ 23996 Successes out of 3000 inputs (7858 msec).
+ 31995 Successes out of 4000 inputs (10442 msec).
+ 39994 Successes out of 5000 inputs (13004 msec).
+ 47992 Successes out of 6000 inputs (15656 msec).
+ 55990 Successes out of 7000 inputs (18268 msec).
+ 63988 Successes out of 8000 inputs (20871 msec).
+ 71982 Successes out of 9000 inputs (23524 msec).
+ 79980 Successes out of 10000 inputs (26111 msec).
+26111 msec to decode 80000 packets.
+ 79980 Successes out of 80000 packets. (100.0%)
+ 87713 cumulative iterations, or about 8.8 per packet.
+Number of iterations for the first few packets:   12 33 13 5 9 9 10 9 9 9 9 7 5 11 7 8 16 19 12 8

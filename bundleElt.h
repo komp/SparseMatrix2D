@@ -73,7 +73,7 @@
 *
 */
 
-#define SLOTS_PER_ELT 4
+#define SLOTS_PER_ELT 8
 #define SAMPLES_PER_SLOT 1
 #define SAMPLE_WIDTH 32
 // #define SAMPLE_MASK  ((1 << SAMPLE_WIDTH) -1)
@@ -94,82 +94,105 @@ typedef localBE bundleElt;
 
 // typedef float4 bundleElt;
 
-#define makeBundleElt(x) ({x,x,x,x})
 
-static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x, float y, float z, float w)
-{
-    bundleElt t; t.s[0] = x; t.s[1] = y; t.s[2] = z; t.s[3] = w; return t;
-}
-static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x)
-{
-    bundleElt t; t.s[0] = x; t.s[1] = x; t.s[2] = x; t.s[3] = x; return t;
-}
+static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x0, float x1, float x2, float x3, float x4, float x5, float x6, float x7) {
+    bundleElt be;
+    be.s[0] = x0; be.s[1] = x1; be.s[2] = x2; be.s[3] = x3;
+    be.s[4] = x4; be.s[5] = x5; be.s[6] = x6; be.s[7] = x7;
+    return be;}
 
-inline __host__ __device__ void operator+=(bundleElt &a, bundleElt b)
-{
+static __inline__ __host__ __device__ bundleElt  make_bundleElt(float x) {
+    return make_bundleElt(x,x,x,x,x,x,x,x);}
+
+inline __host__ __device__ void operator+=(bundleElt &a, bundleElt b) {
     a.s[0] += b.s[0];
     a.s[1] += b.s[1];
     a.s[2] += b.s[2];
     a.s[3] += b.s[3];
-}
-inline __host__ __device__ void operator*=(bundleElt &a, bundleElt b)
-{
+    a.s[4] += b.s[4];
+    a.s[5] += b.s[5];
+    a.s[6] += b.s[6];
+    a.s[7] += b.s[7];}
+
+inline __host__ __device__ void operator*=(bundleElt &a, bundleElt b) {
     a.s[0] *= b.s[0];
     a.s[1] *= b.s[1];
     a.s[2] *= b.s[2];
     a.s[3] *= b.s[3];
-}
+    a.s[4] *= b.s[4];
+    a.s[5] *= b.s[5];
+    a.s[6] *= b.s[6];
+    a.s[7] *= b.s[7];}
 
-inline __host__ __device__ bundleElt operator+(bundleElt a, bundleElt b)
-{
+inline __host__ __device__ bundleElt operator+(bundleElt a, bundleElt b) {
     bundleElt be;
     be.s[0] = a.s[0] + b.s[0];
     be.s[1] = a.s[1] + b.s[1];
     be.s[2] = a.s[2] + b.s[2];
     be.s[3] = a.s[3] + b.s[3];
-    return be;
-}
-inline __host__ __device__ bundleElt operator-(bundleElt a, bundleElt b)
-{
+    be.s[4] = a.s[4] + b.s[4];
+    be.s[5] = a.s[5] + b.s[5];
+    be.s[6] = a.s[6] + b.s[6];
+    be.s[7] = a.s[7] + b.s[7];
+    return be;}
+
+inline __host__ __device__ bundleElt operator-(bundleElt a, bundleElt b) {
     bundleElt be;
     be.s[0] = a.s[0] - b.s[0];
     be.s[1] = a.s[1] - b.s[1];
     be.s[2] = a.s[2] - b.s[2];
     be.s[3] = a.s[3] - b.s[3];
-    return be;
-}
-inline __host__ __device__ bundleElt operator*(bundleElt a, bundleElt b)
-{
+    be.s[4] = a.s[4] - b.s[4];
+    be.s[5] = a.s[5] - b.s[5];
+    be.s[6] = a.s[6] - b.s[6];
+    be.s[7] = a.s[7] - b.s[7];
+    return be;}
+
+inline __host__ __device__ bundleElt operator*(bundleElt a, bundleElt b) {
     bundleElt be;
     be.s[0] = a.s[0] * b.s[0];
     be.s[1] = a.s[1] * b.s[1];
     be.s[2] = a.s[2] * b.s[2];
     be.s[3] = a.s[3] * b.s[3];
-    return be;
-}
-inline __host__ __device__ bundleElt operator/(bundleElt a, bundleElt b)
-{
+    be.s[4] = a.s[4] * b.s[4];
+    be.s[5] = a.s[5] * b.s[5];
+    be.s[6] = a.s[6] * b.s[6];
+    be.s[7] = a.s[7] * b.s[7];
+    return be;}
+
+inline __host__ __device__ bundleElt operator/(bundleElt a, bundleElt b) {
     bundleElt be;
     be.s[0] = a.s[0] / b.s[0];
     be.s[1] = a.s[1] / b.s[1];
     be.s[2] = a.s[2] / b.s[2];
     be.s[3] = a.s[3] / b.s[3];
-    return be;
-}
-inline __host__ __device__ bundleElt operator/(bundleElt a, float b)
-{
+    be.s[4] = a.s[4] / b.s[4];
+    be.s[5] = a.s[5] / b.s[5];
+    be.s[6] = a.s[6] / b.s[6];
+    be.s[7] = a.s[7] / b.s[7];
+    return be;}
+
+inline __host__ __device__ bundleElt operator/(bundleElt a, float b) {
     bundleElt be;
     be.s[0] = a.s[0] / b;
     be.s[1] = a.s[1] / b;
     be.s[2] = a.s[2] / b;
     be.s[3] = a.s[3] / b;
-    return be;
+    be.s[4] = a.s[4] / b;
+    be.s[5] = a.s[5] / b;
+    be.s[6] = a.s[6] / b;
+    be.s[7] = a.s[7] / b;
+    return be;}
+
+inline __device__ __host__ bundleElt clamp(bundleElt v, float a, float b) {
+    return make_bundleElt(clamp(v.s[0], a, b), clamp(v.s[1], a, b), clamp(v.s[2], a, b), clamp(v.s[3], a, b),
+                          clamp(v.s[4], a, b), clamp(v.s[5], a, b), clamp(v.s[6], a, b), clamp(v.s[7], a, b));}
+
+inline __host__ __device__ void fprintBE(FILE *fd, bundleElt a) {
+    fprintf(fd, "[%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f]",
+            a.s[0],a.s[1],a.s[2],a.s[3],a.s[4],a.s[5],a.s[6],a.s[7]);
 }
 
-inline __device__ __host__ bundleElt clamp(bundleElt v, float a, float b)
-{
-    return make_bundleElt(clamp(v.s[0], a, b), clamp(v.s[1], a, b), clamp(v.s[3], a, b), clamp(v.s[3], a, b));
-}
 
 #define ONEVAL(be)  (be).s[0]
 #endif
