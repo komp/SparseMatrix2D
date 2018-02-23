@@ -9,7 +9,7 @@
 #include "GPUincludes.h"
 #include "LDPC.h"
 
-#define NTHREADS   32
+#define NTHREADS   64
 #define CNP_THREADS   20  // checkNodeProcessing threads
 
 unsigned int nChecksByBits;
@@ -126,7 +126,7 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
   ////////////////////////////////////////////////////////////////////////////
 
   for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
-    checkNodeProcessingOptimalBlock <<<numChecks, NTHREADS>>>(numChecks, maxBitsPerCheck,
+    checkNodeProcessingOptimalBlock <<<numChecks, CNP_THREADS>>>(numChecks, maxBitsPerCheck,
                                                               dev_lambdaByCheckIndex, dev_eta,
                                                               dev_mapRC, dev_etaByBitIndex);
 
