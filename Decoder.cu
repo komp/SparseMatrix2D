@@ -20,7 +20,7 @@ bundleElt *etaByBitIndex;
 bundleElt *lambdaByCheckIndex;
 bundleElt *cHat;
 bundleElt *parityBits;
-bundleElt *paritySum;
+bundleElt paritySum;
 
 bundleElt *dev_rSig;
 bundleElt *dev_eta;
@@ -29,7 +29,6 @@ bundleElt *dev_etaByBitIndex;
 bundleElt *dev_lambdaByCheckIndex;
 bundleElt *dev_cHat;
 bundleElt *dev_parityBits;
-bundleElt *dev_paritySum;
 
 unsigned int *dev_mapRC;
 unsigned int *dev_mapCR;
@@ -56,11 +55,6 @@ void initLdpcDecoder  (H_matrix *hmat) {
   cHat = (bundleElt *)malloc(nChecksByBits* sizeof(bundleElt));
   parityBits = (bundleElt *)malloc(numChecks * sizeof(bundleElt));
 
-  // cudaMallocHost for paritySum ensures the value is in "pinned memory",
-  // so the DeviceToHost transfer should be faster.
-  // Unfortunately, early tests show no improvement
-  HANDLE_ERROR( cudaMallocHost((void**)&paritySum, sizeof(bundleElt)));
-
   HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * sizeof(bundleElt) ));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * sizeof(bundleElt)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_lambda, numBits * sizeof(bundleElt)));
@@ -70,7 +64,6 @@ void initLdpcDecoder  (H_matrix *hmat) {
   HANDLE_ERROR( cudaMalloc( (void**)&dev_mapCR, nBitsByChecks * sizeof(unsigned int)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_cHat, nChecksByBits * sizeof(bundleElt)));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_parityBits, numChecks * sizeof(bundleElt)));
-  HANDLE_ERROR( cudaMalloc( (void**)&dev_paritySum, 1 * sizeof(bundleElt)));
 
   HANDLE_ERROR(cudaMemcpy(dev_mapRC, mapRows2Cols, nChecksByBits * sizeof(unsigned int), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
@@ -138,7 +131,7 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
 
     //  The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
     HANDLE_ERROR(cudaMemcpy(parityBits, dev_parityBits, numChecks*sizeof(bundleElt),cudaMemcpyDeviceToHost));
-    paritySum[0] = make_bundleElt(0.0);
+    paritySum = make_bundleElt(0.0);
     for (unsigned int check=0; check < numChecks; check++) {
       for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)parityBits[check].s[slot] != 0) allChecksPassed = false;
       if (! allChecksPassed) break;
@@ -147,10 +140,10 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
   }
   // Return our best guess.
   // if iterCounter < maxIterations, then successful.
-  paritySum[0] = make_bundleElt(0.0);
-  for (unsigned int check=0; check < numChecks; check++) paritySum[0] += parityBits[check];
+  paritySum = make_bundleElt(0.0);
+  for (unsigned int check=0; check < numChecks; check++) paritySum += parityBits[check];
   successCount = 0;
-  for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum[0].s[slot] == 0) successCount++;
+  for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)paritySum.s[slot] == 0) successCount++;
 
   returnVal = (iterCounter << 4) + successCount;
   return (returnVal);
