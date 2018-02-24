@@ -7,19 +7,13 @@
 *    \brief Header file for data type to hold one element of a bundle.
 *
 *  A bundle is the group of packets that are decoded at the same time.
-*  Each invocation of BN_processing or CN_processing is applied to
-*  every packet in the bundle.
-*
-*  The packets are collected into bundleElements (bundleElt).
-*  bundleElt[n]  contains the n'th value for each packet in the bundle
+*  Each kernel must handle every packet in the bundle.
 *
 *  bundleElt is typically implemented as a vector of a basic type
-*  (unsigned int, is an example).
+*  (float for example).
 *  One or more samples may be stored in each element of this vector
-*  via packing.  (The original implementation, stored 4 samples
-*  (8 bits) in each unsigned int.
-*
-* It is relatively simple to alter the number of packets placed in a bundle.
+*  via packing.  This capability would only be useful if the basic type
+*  is (unsigned) int; and < 32 bits are needed for the range of values.
 *
 *  The number of packets in a bundle is controlled by two values:
 *  SLOTS_PER_ELT   -- length of the vector
@@ -33,44 +27,9 @@
 *  bundleElt must contain at least 8 addressable fields.
 *  Likewise, (SAMPLE_WIDTH * SAMPLES_PER_SLOT) <= number of bits in a SLOT.
 *
-*  The rest of the code in this package functions without alteration
-*  with any valid combination of #define's;
-*  with the exception of:
-*  slotAtIndex.cu  and
-*  macros.h
-*
-*  slotAtIndex.cu
-*  ===============
-*  If you change this file, you will likely need to modify the functions:
-*
-*  int slotAtIndex (bundleElt *element, unsigned int index);
-*  void saveAtIndex (bundleElt* element, unsigned int index, int value);
-*
-*  which provide the interface to acess/modify each slot of a bundleElt.
-*
-*  SoftDecode.cu
-*  ==============
-*  This file contains macro expansions for
-*  DOITALL_CN
-*  and
-*  DOITALL_BN
-*
-*  for each slot in a bundleElt.
-*
-*  You must add/remove occurrences of these macros to match
-*  SLOTS_PER_ELT
-*  and, you may have to modify the first argument to these macros: "word"
-*  this is the string (not quoted) necessary to address the slot.
-*  Some examples:
-*  If  bundleElt is  unsigned int slot[8],  then
-*  slot[0], slot[1] ...
-*  if  bundleElt is  uint4
-*  (a specific cuda typedef that includes 4 unsigned ints,
-*  that includes (multiple) specific addressing alternatives
-*  via  union), then
-*  x, y, z, w  could be used  or
-*  s0, s1, s2, s3
-*
+*  Several common operators are overloaded for bundleElt in this include file.
+*  If you modiy bundleElt, you will need to update each of these definitions
+*  at the same time.
 */
 
 #define SLOTS_PER_ELT 8

@@ -4,7 +4,7 @@ __global__ void
 calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck,
                 unsigned int nChecksByBits, unsigned int nBundles) {
 
-  unsigned int bundleIndex, bundleBase, etaIndex;
+  unsigned int bundleIndex, bundleBase;
   unsigned int tid, m;
   unsigned int thisRowLength;
 

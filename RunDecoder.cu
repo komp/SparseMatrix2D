@@ -104,7 +104,7 @@ int main (int argc, char **argv) {
 
 
   printf("parameters have been read.\n");
-  printf("SLOTS_PER_ELT = %d\n", SLOTS_PER_ELT);
+  printf("SLOTS_PER_ELT = %d  # bundles = %d\n", SLOTS_PER_ELT, nBundles);
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
   printf("infoLeng = %i, numParityBits = %i (%i), numBits = %i\n",
          infoLeng, numParityBits, infoLeng + numParityBits, numBits);
