@@ -15,22 +15,27 @@
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
                                  bundleElt *lambdaByCheckIndex, bundleElt *eta, unsigned int* mapRows2Cols,
-                                 bundleElt *etaByBitIndex) {
+                                 bundleElt *etaByBitIndex,
+                                 unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles) {
 
+  unsigned int bundleIndex, bundleBase, etaIndex;
   unsigned int m, n;
   unsigned int thisRowLength, currentIndex;
   bundleElt arg, value;
   bundleElt myprod;
 
-  m = blockIdx.x;
+  bundleIndex = blockIdx.x / numChecks;
+  m = blockIdx.x % numChecks;
   n = threadIdx.x + 1;
-  if (m < numChecks) {
+  if (bundleIndex < nBundles) {
+    bundleBase = bundleIndex* nChecksByBits;
     __shared__ bundleElt rowVals[128];
 
     thisRowLength = (int) ONEVAL(eta[m]);
     if (n <= thisRowLength) {
       currentIndex = m + (n* numChecks);
-      arg =  (eta[currentIndex] - lambdaByCheckIndex[currentIndex]) / 2.0;
+      etaIndex = bundleBase + currentIndex;
+      arg =  (eta[etaIndex] - lambdaByCheckIndex[etaIndex]) / 2.0;
       for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) {
         value.s[slot] = tanhf(arg.s[slot]);
         if (value.s[slot] == 0.0) {value.s[slot] = MIN_TANH_MAGNITUDE;}
@@ -43,8 +48,8 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
 
       for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) value.s[slot] = -2 * atanhf(myprod.s[slot]);
       value = clamp(value, -MAX_ETA, MAX_ETA);
-      eta[currentIndex] =  value;
-      etaByBitIndex[ mapRows2Cols[currentIndex] ] = value;
+      eta[etaIndex] =  value;
+      etaByBitIndex[ (bundleIndex * nBitsByChecks) + mapRows2Cols[currentIndex] ] = value;
     }
   }
 }

@@ -15,12 +15,14 @@ typedef struct{
 
 
 __global__ void
-checkNodeProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
-                            bundleElt *lambdaByCheckIndex, bundleElt *eta);
+checkNodProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
+                           bundleElt *lambdaByCheckIndex, bundleElt *eta);
+
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
                                  bundleElt *lambdaByCheckIndex, bundleElt *eta,
-                                 unsigned int* mapRows2Cols, bundleElt *etaByBitIndex);
+                                 unsigned int* mapRows2Cols, bundleElt *etaByBitIndex,
+                                 unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
 
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -35,7 +37,9 @@ checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsFor
                                  bundleElt *lambdaByCheckIndex, bundleElt *eta);
 __global__ void
 bitEstimates(bundleElt *rSig, bundleElt *etaByBitIndex, bundleElt *lambdaByCheckIndex, bundleElt *hd,
-             unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit);
+             unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit,
+             unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
+
 
 __global__ void
 transposeRC (unsigned int* map, bundleElt *checkRows, bundleElt *bitRows,
@@ -43,10 +47,12 @@ transposeRC (unsigned int* map, bundleElt *checkRows, bundleElt *bitRows,
 
 __global__ void
 copyBitsToCheckmatrix (unsigned int* map, bundleElt *bitEstimates, bundleElt *checkRows,
-                       unsigned int numBits, unsigned int maxChecksForBit);
-
+                       unsigned int numBits, unsigned int maxChecksForBit,
+                       unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
 __global__ void
-calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck);
+calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck,
+                unsigned int nChecksByBits, unsigned int nBundles);
+
 
 
 void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
@@ -63,9 +69,9 @@ int ldpcDecoder (bundleElt *rSig, unsigned int numChecks, unsigned int numBits,
 
 int ReadAlistFile(H_matrix *hmat, const char *AlistFile);
 
-void initLdpcDecoder  (H_matrix *hmat);
+void initLdpcDecoder  (H_matrix *hmat, unsigned int nBundles);
 
-int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxIterations, unsigned int *decision, bundleElt *estimates);
+int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxIterations, unsigned int *decision, bundleElt *estimates, unsigned int nBundles);
 
 void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
                      unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,

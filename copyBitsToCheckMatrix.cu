@@ -2,24 +2,26 @@
 
 // copyBitsToCheckmatrix accepts a vector of the current bitEstimates
 // and copies them into a checkRow matrix, where each row represents a check.
-// It also generates a HardDecision copy of that output matrix checkRows.
 __global__ void
 copyBitsToCheckmatrix (unsigned int* map, bundleElt *bitEstimates, bundleElt *checkRows,
-                       unsigned int numBits, unsigned int maxChecksForBit) {
+                       unsigned int numBits, unsigned int maxChecksForBit,
+                       unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles) {
   // index
+  unsigned int bundleIndex;
   unsigned int m, n;
   unsigned int thisRowLength;
   unsigned int cellIndex, oneDindex;
   bundleElt thisBitEstimate;
 
-  n = blockIdx.x;
+  bundleIndex = blockIdx.x / numBits;
+  n = blockIdx.x % numBits;
   m = threadIdx.x + 1;
-  if (n < numBits) {
+  if (bundleIndex < nBundles) {
     thisRowLength = map[n];
-    thisBitEstimate = bitEstimates[n];
+    thisBitEstimate = bitEstimates[(bundleIndex * nBitsByChecks) + n];
     if (m <= thisRowLength) {
-      cellIndex = m * numBits + n;
-      oneDindex = map[cellIndex];
+      cellIndex =  m * numBits + n;
+      oneDindex = map[cellIndex] + (bundleIndex * nChecksByBits);
       checkRows[oneDindex] = thisBitEstimate;
     }
   }
