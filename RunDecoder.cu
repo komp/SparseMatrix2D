@@ -198,6 +198,7 @@ int main (int argc, char **argv) {
   printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),totalPackets);
   printf("%i msec to encode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTimeE).count(),totalPackets);
   printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
+  printf("Information rate: %.2f Mbps\n", successes * infoLeng / (1000.0 * std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count()));
   printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
   for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
