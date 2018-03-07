@@ -50,11 +50,11 @@ void initLdpcDecoder  (H_matrix *hmat, unsigned int nBundles) {
   unsigned int nChecksByBits = numChecks*(maxBitsPerCheck+1);
   unsigned int nBitsByChecks = numBits*(maxChecksPerBit+1);
 
-  eta = (bundleElt *)malloc(nChecksByBits* nBundles*sizeof(bundleElt));
-  etaByBitIndex= (bundleElt *)malloc(nBitsByChecks* nBundles*sizeof(bundleElt));
-  lambdaByCheckIndex = (bundleElt *)malloc(nChecksByBits* nBundles*sizeof(bundleElt));
-  cHat = (bundleElt *)malloc(nChecksByBits* nBundles*sizeof(bundleElt));
-  parityBits = (bundleElt *)malloc(numChecks * nBundles*sizeof(bundleElt));
+  HANDLE_ERROR( cudaMallocHost((void**) &eta, nChecksByBits* nBundles*sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMallocHost((void**) & etaByBitIndex, nBitsByChecks * nBundles*sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMallocHost((void**) & lambdaByCheckIndex, nChecksByBits* nBundles*sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMallocHost((void**) & cHat, nChecksByBits* nBundles*sizeof(bundleElt)));
+  HANDLE_ERROR( cudaMallocHost((void**) & parityBits, numChecks * nBundles*sizeof(bundleElt)));
 
   HANDLE_ERROR( cudaMalloc( (void**)&dev_rSig, numBits * nBundles*sizeof(bundleElt) ));
   HANDLE_ERROR( cudaMalloc( (void**)&dev_eta, nChecksByBits * nBundles*sizeof(bundleElt)));
