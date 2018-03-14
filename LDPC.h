@@ -27,7 +27,8 @@ checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsFor
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
                            bundleElt *lambdaByCheckIndex, bundleElt *eta,
-                           unsigned int* mapRows2Cols, bundleElt *etaByBitIndex);
+                           unsigned int* mapRows2Cols, bundleElt *etaByBitIndex,
+                           unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
 
 __global__ void
 checkNodeProcessingMinSumBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
