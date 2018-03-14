@@ -58,5 +58,10 @@ TestEncoder.o: TestEncoder.cu
 TestEncoder: Encoder.o TestEncoder.o
 	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
 
+concurrentKernels.o: concurrentKernels.cu
+	$(NVCC) $(NVCC_INCLUDES)  $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
+concurrentKernels: concurrentKernels.o
+	$(NVCC) $(NVCC_FLAGS)  $(NVCC_LDFLAGS) -o $@ $+ $(LIBRARIES) $(NVCC_LIBRARIES)
+
 clean:
 	rm -f RunDecoder $(OBJECTS)
