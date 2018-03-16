@@ -9,6 +9,9 @@
 #include "GPUincludes.h"
 #include "LDPC.h"
 
+#include "loader_pool.h"
+#include "decoder_pool.h"
+
 #define HISTORY_LENGTH  20
 
 int main (int argc, char **argv) {
@@ -17,15 +20,12 @@ int main (int argc, char **argv) {
 
   clock::time_point startTime;
   clock::time_point endTime;
-  clock::duration oneTime;
   clock::duration allTime;
-  // for recording time spent encoding.
-  clock::duration allTimeE;
 
   int status;
   unsigned int numChecks, numBits;
-  unsigned int nBundles;
   unsigned int numRowsW, numColsW, numParityBits, shiftRegLength;
+  unsigned int numThreads, sigBufferLength;
   unsigned int *W_ROW_ROM;
 
   H_matrix *hmat = (H_matrix*) malloc(sizeof(H_matrix));
@@ -41,21 +41,8 @@ int main (int argc, char **argv) {
   float rNominal;
   float No, sigma2, lc;
 
-  unsigned int  seed = 163331;
-  /*  or use this to get a fresh sequence each time the program is run.
-  std::random_device  rd;  //Will be used to obtain a seed for the random number engine
-  std::mt19937 generator(rd()); //Standard mersenne_twister_engine seeded with rd()
-  */
-  std::mt19937 generator(seed); //Standard mersenne_twister_engine
-  std::uniform_real_distribution<> rDist(0, 1);
-
-  // normal distribution for noise.
-  // NOTE,  we are using the same random number generator ("generator") here.
-  std::normal_distribution<float> normDist(0.0, 1.0);
-
-
   if (argc < 8) {
-    printf("usage:  RunDecoder <infoLength> <r-numerator> <r-denominator> <ebno> <numpackets> <maxIterations> <numBundles>\n" );
+    printf("usage:  RunDecoder <infoLength> <r-numerator> <r-denominator> <ebno> <numpackets> <maxIterations> <# Threads>\n" );
     exit(-1);
   }
   infoLeng = atoi(argv[1]);
@@ -65,7 +52,8 @@ int main (int argc, char **argv) {
   ebno = atof(argv[4]);
   how_many = atoi(argv[5]);
   maxIterations = atoi(argv[6]);
-  nBundles = atoi(argv[7]);
+  numThreads = atoi(argv[7]);
+
   sprintf(H_Alist_File, "./G_and_H_Matrices/H_%d%d_%d.alist", rnum, rdenom, infoLeng);
   sprintf(wROM_File, "./G_and_H_Matrices/W_ROW_ROM_%d%d_%d.binary", rnum, rdenom, infoLeng);
 
@@ -104,7 +92,7 @@ int main (int argc, char **argv) {
 
 
   printf("parameters have been read.\n");
-  printf("SLOTS_PER_ELT = %d  # bundles = %d\n", SLOTS_PER_ELT, nBundles);
+  printf("SLOTS_PER_ELT = %d\n", SLOTS_PER_ELT);
   printf("numBits = %i, numChecks = %i\n", numBits, numChecks);
   printf("infoLeng = %i, numParityBits = %i (%i), numBits = %i\n",
          infoLeng, numParityBits, infoLeng + numParityBits, numBits);
@@ -113,96 +101,84 @@ int main (int argc, char **argv) {
 
   // ///////////////////////////////////////////
 
-  unsigned int decision[numBits];
-  bundleElt estimates[numBits];
+  bundleElt *receivedSigs;
+  bundleElt *decodedSigs;
+  bundleElt zeroBE = make_bundleElt(0.0);
+  unsigned int sigIndex;
 
   unsigned int successes = 0;
   unsigned int iterationSum = 0;
-  int totalPackets;
 
   int itersHistory[HISTORY_LENGTH+1];
   int iters;
 
-  unsigned int* infoWord;
-  unsigned int* codeWord;
-  float s, noise;
-  float* receivedSig;
-  bundleElt* receivedBundle;
-
-  infoWord = (unsigned int *)malloc(infoLeng * sizeof(unsigned int));
-  codeWord = (unsigned int *)malloc((infoLeng+numParityBits) * sizeof(unsigned int));
-  receivedSig = (float *)malloc(numBits * sizeof(float));
-  receivedBundle = (bundleElt *)malloc(numBits * nBundles * sizeof(bundleElt));
-
   // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
   startTime = clock::now();
   allTime = startTime - startTime;
-  // timer for encoding.
-  allTimeE = allTime;
 
-  initLdpcDecoder (hmat, nBundles);
+  sigBufferLength = 2 * numThreads;
+  receivedSigs = (bundleElt*) malloc(sigBufferLength *(numBits+1) * sizeof(bundleElt));
+  decodedSigs  = (bundleElt*) malloc(sigBufferLength *(numBits+1) * sizeof(bundleElt));
 
-  FILE *fd;
-  fd = fopen("./evenodd1408.encoded" , "r");
-  if (fd == NULL) {
-    printf("Error opening file %s\n", "./evenodd1408.encoded");
-    return(-1);
-  }
-  for (int i=0; i< numBits; i++) fscanf(fd, "%d", &codeWord[i]);
-  fclose(fd);
+  enum PktState { loading, decoding };
 
-  for (unsigned int i=1; i<= how_many; i++) {
-    startTime = clock::now();
-    for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
-      for (unsigned int j=0; j < infoLeng; j++) {
-        infoWord[j] = (0.5 >= rDist(generator))? 1:0;
-      }
-      //edk  when commented, this implies we are using a "standard" infoWord
-      //edk  of alternating 0/1.
-      ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+  std::vector<PktState> bufferStates;
+  bufferStates.reserve(sigBufferLength);
 
-      // Modulate the codeWord, and add noise
-      for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
-        s     = 2*float(codeWord[j]) - 1;
-        // AWGN channel
-        noise = sqrt(sigma2) * normDist(generator);
-        // When r is scaled by Lc it results in precisely scaled LLRs
-        receivedSig[j]  = lc*(s + noise);
-      }
-      // The LDPC codes are punctured, so the r we feed to the decoder is
-      // longer than the r we got from the channel. The punctured positions are filled in as zeros
-      for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
+  DecoderPool decoders (hmat, maxIterations, numThreads);
+  LoaderPool pktLoader (infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
 
-      for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j];
-      }
-    endTime = clock::now();
-    oneTime = endTime - startTime;
-    allTimeE = allTimeE + oneTime;
-
-    // Finally, ready to decode signal
-    startTime = clock::now();
-    iters = ldpcDecoderWithInit (hmat, receivedBundle, maxIterations, decision, estimates, nBundles);
-    endTime = clock::now();
-    oneTime = endTime - startTime;
-    allTime = allTime + oneTime;
-
-    successes += iters >> 8;
-    iters = iters & 0xff ;
-    iterationSum = iterationSum + iters;
-    if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
-    if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%i msec).\n",
-                              successes, i, std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count());
+  for (unsigned int i=0; i< sigBufferLength; i++) {
+    sigIndex = i* (numBits+1);
+    receivedSigs[sigIndex] = zeroBE;
+    decodedSigs[sigIndex]  = zeroBE;
+    pktLoader.schedule_job(&receivedSigs[sigIndex]);
+    bufferStates[i] = loading;
   }
 
-  totalPackets = nBundles * SLOTS_PER_ELT * how_many;
-  printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),totalPackets);
-  printf("%i msec to encode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTimeE).count(),totalPackets);
-  printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
+  unsigned int pktsDecoded = 0;
+  startTime = clock::now();
+
+  while (pktsDecoded < how_many) {
+    for (unsigned int i=0; i< sigBufferLength; i++) {
+      sigIndex = i * (numBits+1);
+      switch(bufferStates[i]) {
+      case loading :
+        if (ONEVAL(receivedSigs[sigIndex]) != 0 ) {
+          receivedSigs[sigIndex] = zeroBE;
+          decoders.schedule_job(&receivedSigs[sigIndex], &decodedSigs[sigIndex]);
+          bufferStates[i] = decoding;
+          break;
+        }
+      case decoding :
+        if (ONEVAL(decodedSigs[sigIndex]) != 0 ) {
+          iters = (int)ONEVAL(decodedSigs[sigIndex]);
+          successes += iters >> 8;
+          iters = iters & 0xff ;
+          iterationSum = iterationSum + iters;
+          pktsDecoded += SLOTS_PER_ELT;
+          decodedSigs[sigIndex] = zeroBE;
+          pktLoader.schedule_job(&receivedSigs[sigIndex]);
+          receivedSigs[sigIndex] = zeroBE;
+          bufferStates[i] = loading;
+          break;
+        }
+      }
+    }
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  }
+  endTime = clock::now();
+  allTime = endTime - startTime;
+
+  printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),pktsDecoded);
+  printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, pktsDecoded, 100.0 * successes/ pktsDecoded);
   printf("Information rate: %.2f Mbps\n", successes * infoLeng / (1000.0 * std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count()));
-  printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
-  printf("Number of iterations for the first few packets:  ");
-  for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
-  printf ("\n");
+  // SLOTS_PER_ELT packets are handled in each iteration, so...
+  iterationSum = iterationSum * SLOTS_PER_ELT;
+  printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)pktsDecoded);
+  //  printf("Number of iterations for the first few packets:  ");
+  //  for (unsigned int i=1; i<= MIN(pktsDecoded, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
+  //  printf ("\n");
 
   cudaDeviceReset();
 }

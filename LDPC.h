@@ -1,3 +1,6 @@
+#ifndef LDPC_H
+#define LDPC_H
+
 #include  "bundleElt.h"
 
 typedef struct{
@@ -21,8 +24,7 @@ checkNodProcessingOptimal (unsigned int numChecks, unsigned int maxBitsForCheck,
 __global__ void
 checkNodeProcessingOptimalBlock (unsigned int numChecks, unsigned int maxBitsForCheck,
                                  bundleElt *lambdaByCheckIndex, bundleElt *eta,
-                                 unsigned int* mapRows2Cols, bundleElt *etaByBitIndex,
-                                 unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
+                                 unsigned int* mapRows2Cols, bundleElt *etaByBitIndex);
 
 __global__ void
 checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
@@ -37,9 +39,8 @@ __global__ void
 checkNodeProcessingOptimalNaive (unsigned int numChecks, unsigned int maxBitsForCheck,
                                  bundleElt *lambdaByCheckIndex, bundleElt *eta);
 __global__ void
-bitEstimates(bundleElt *rSig, bundleElt *etaByBitIndex, bundleElt *lambdaByCheckIndex, bundleElt *hd,
-             unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit,
-             unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
+bitEstimates(bundleElt *rSig, bundleElt *estimate, bundleElt *etaByBitIndex, bundleElt *lambdaByCheckIndex,
+             unsigned int *mapCols2Rows, unsigned int numBits, unsigned int maxChecksForBit);
 
 
 __global__ void
@@ -51,8 +52,7 @@ copyBitsToCheckmatrix (unsigned int* map, bundleElt *bitEstimates, bundleElt *ch
                        unsigned int numBits, unsigned int maxChecksForBit,
                        unsigned int nChecksByBits, unsigned int nBitsByChecks, unsigned int nBundles);
 __global__ void
-calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck,
-                unsigned int nChecksByBits, unsigned int nBundles);
+calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck);
 
 
 
@@ -61,18 +61,12 @@ void ldpcEncoder (unsigned int *infoWord, unsigned int* W_ROW_ROM,
                    unsigned int shiftRegLength,
                   unsigned int *codeWord);
 
-int ldpcDecoder (bundleElt *rSig, unsigned int numChecks, unsigned int numBits,
-                 unsigned int maxBitsForCheck, unsigned int maxChecksForBit,
-                 unsigned int *mapRows2Cols, unsigned int *mapCols2Rows,
-                 unsigned int maxIterations,
-                 unsigned int *decision,
-                 bundleElt *estimates);
+int ldpcDecoder (H_matrix *hmat, unsigned int  maxIterations, bundleElt *rSig, bundleElt *decodedPkt,
+                 bundleElt *dev_rSig, bundleElt *dev_estimate, bundleElt *dev_eta, bundleElt *dev_etaByBitIndex,
+                 bundleElt *dev_lambdaByCheckIndex, bundleElt *dev_parityBits,
+                 unsigned int *dev_mapRC, unsigned int *dev_mapCR);
 
 int ReadAlistFile(H_matrix *hmat, const char *AlistFile);
-
-void initLdpcDecoder  (H_matrix *hmat, unsigned int nBundles);
-
-int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxIterations, unsigned int *decision, bundleElt *estimates, unsigned int nBundles);
 
 void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
                      unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,
@@ -81,3 +75,4 @@ void remapRows2Cols (unsigned int numChecks, unsigned int numBits,
 void remapCols2Rows (unsigned int numChecks, unsigned int numBits,
                      unsigned int maxBitsPerCheck, unsigned int maxChecksPerBit,
                      unsigned int *c2r, unsigned int *newC2R);
+#endif
