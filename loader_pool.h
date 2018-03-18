@@ -33,7 +33,7 @@ private:
 
     bool                        P_running;
     mutable std::mutex          P_mutex;
-    std::thread                 P_thread;
+    std::vector<std::thread>    P_threads;
 
     unsigned int                P_infoLeng;
     unsigned int                P_numBits;

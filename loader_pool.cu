@@ -25,7 +25,10 @@ LoaderPool::LoaderPool (unsigned int infoLength, unsigned int numBits, unsigned 
 , P_lc (lc)
 
 {
-  P_thread = std::thread(&LoaderPool::worker_main, this);
+  P_threads.reserve(4);
+  for (size_t i = 0; i < 4; i++) {
+    P_threads.emplace_back(&LoaderPool::worker_main, this);
+  }
 }
 
 LoaderPool::~LoaderPool() {
@@ -33,7 +36,7 @@ LoaderPool::~LoaderPool() {
   P_running = false;
   P_cv_worker.notify_all();
   lock.unlock();
-  P_thread.join();
+  for (auto& t : P_threads) t.join();
 }
 
 void LoaderPool::schedule_job(bundleElt *packet_address) {
