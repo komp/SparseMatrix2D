@@ -26,11 +26,10 @@ DecoderPool::~DecoderPool() {
   for (auto& t : P_threads) t.join();
 }
 
-void DecoderPool::schedule_job(bundleElt *packet_address, bundleElt *decode_address) {
+void DecoderPool::schedule_job(Tpkt *packet) {
   std::lock_guard<std::mutex> lock(P_mutex);
 
-  P_job_packet_address.push_back(packet_address);
-  P_job_decode_address.push_back(decode_address);
+  P_job_packet.push_back(packet);
   P_job_size++;
   P_cv_worker.notify_one();
 }
@@ -39,6 +38,7 @@ void DecoderPool::worker_main() {
 
   std::unique_lock<std::mutex> lock(P_mutex);
 
+  Tpkt* packet;
   unsigned int  returnVal;
 
   bundleElt *dev_rSig;
@@ -95,18 +95,16 @@ void DecoderPool::worker_main() {
     P_cv_worker.wait(lock);
     for (;;) {
       if (P_job_size == 0) break;
-      bundleElt *packet_address = P_job_packet_address.back();
-      bundleElt *decode_address = P_job_decode_address.back();
-      P_job_packet_address.pop_back();
-      P_job_decode_address.pop_back();
+      packet = P_job_packet.back();
+      P_job_packet.pop_back();
       P_job_size--;
 
       lock.unlock();
 
-      returnVal =  ldpcDecoder (P_hmat, P_maxIterations, (packet_address+1), (decode_address +1),
+      returnVal =  ldpcDecoder (P_hmat, P_maxIterations, packet->receivedSigs, packet->decodedSigs,
                                 dev_rSig, dev_estimate, dev_eta, dev_etaByBitIndex, dev_lambdaByCheckIndex,
                                 dev_parityBits, dev_mapRC, dev_mapCR);
-      decode_address[0] = make_bundleElt(float(returnVal));
+      packet->decodeStamp = returnVal;
       lock.lock();
     }
   }

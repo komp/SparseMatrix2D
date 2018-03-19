@@ -108,8 +108,6 @@ int main (int argc, char **argv) {
 
   unsigned int successes = 0;
   unsigned int iterationSum = 0;
-
-  int itersHistory[HISTORY_LENGTH+1];
   int iters;
 
   // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
@@ -117,23 +115,20 @@ int main (int argc, char **argv) {
   allTime = startTime - startTime;
 
   sigBufferLength = 2 * numThreads;
-  receivedSigs = (bundleElt*) malloc(sigBufferLength *(numBits+1) * sizeof(bundleElt));
-  decodedSigs  = (bundleElt*) malloc(sigBufferLength *(numBits+1) * sizeof(bundleElt));
+  receivedSigs = (bundleElt*) malloc(sigBufferLength * numBits * sizeof(bundleElt));
+  decodedSigs  = (bundleElt*) malloc(sigBufferLength * numBits * sizeof(bundleElt));
 
-  enum PktState { loading, decoding };
+  std::vector<Tpkt> buffer;
+  buffer.reserve(sigBufferLength);
 
-  std::vector<PktState> bufferStates;
-  bufferStates.reserve(sigBufferLength);
-
-  DecoderPool decoders (hmat, maxIterations, numThreads);
-  LoaderPool pktLoader (infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
+  DecoderPool* decoders = new DecoderPool(hmat, maxIterations, numThreads);
+  LoaderPool* pktLoader = new LoaderPool(infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
 
   for (unsigned int i=0; i< sigBufferLength; i++) {
-    sigIndex = i* (numBits+1);
-    receivedSigs[sigIndex] = zeroBE;
-    decodedSigs[sigIndex]  = zeroBE;
-    pktLoader.schedule_job(&receivedSigs[sigIndex]);
-    bufferStates[i] = loading;
+    sigIndex = i* numBits;
+    buffer.emplace_back(&receivedSigs[sigIndex],  & decodedSigs[sigIndex]);
+    buffer[i].state = LOADING;
+    pktLoader->schedule_job(&buffer[i]);
   }
 
   unsigned int pktsDecoded = 0;
@@ -142,33 +137,39 @@ int main (int argc, char **argv) {
   while (pktsDecoded < how_many) {
     for (unsigned int i=0; i< sigBufferLength; i++) {
       sigIndex = i * (numBits+1);
-      switch(bufferStates[i]) {
-      case loading :
-        if (ONEVAL(receivedSigs[sigIndex]) != 0 ) {
-          receivedSigs[sigIndex] = zeroBE;
-          decoders.schedule_job(&receivedSigs[sigIndex], &decodedSigs[sigIndex]);
-          bufferStates[i] = decoding;
-          break;
+      switch(buffer[i].state) {
+      case LOADING :
+        if (buffer[i].loadStamp != 0 ) {
+          buffer[i].loadStamp = 0;
+          buffer[i].state = DECODING;
+          decoders->schedule_job(&buffer[i]);
         }
-      case decoding :
-        if (ONEVAL(decodedSigs[sigIndex]) != 0 ) {
-          iters = (int)ONEVAL(decodedSigs[sigIndex]);
+        break;
+      case DECODING :
+        if (buffer[i].decodeStamp != 0 ) {
+          iters = buffer[i].decodeStamp;
           successes += iters >> 8;
           iters = iters & 0xff ;
           iterationSum = iterationSum + iters;
           pktsDecoded += SLOTS_PER_ELT;
-          decodedSigs[sigIndex] = zeroBE;
-          pktLoader.schedule_job(&receivedSigs[sigIndex]);
-          receivedSigs[sigIndex] = zeroBE;
-          bufferStates[i] = loading;
-          break;
+          if ((pktsDecoded % 10000) == 0) {
+            printf (" .");
+            fflush(stdout);
+          }
+          buffer[i].decodeStamp = 0;
+          buffer[i].state = LOADING;
+          pktLoader->schedule_job(&buffer[i]);
         }
+        break;
       }
     }
-    //    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   }
   endTime = clock::now();
   allTime = endTime - startTime;
+
+  printf("\n");
+  delete pktLoader;
+  delete decoders;
 
   printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),pktsDecoded);
   printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, pktsDecoded, 100.0 * successes/ pktsDecoded);

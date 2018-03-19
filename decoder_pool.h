@@ -24,7 +24,7 @@ public:
     DecoderPool(const DecoderPool&) = delete;
     DecoderPool& operator=(const DecoderPool&) = delete;
 
-    void schedule_job(bundleElt *packet_address, bundleElt *decode_address);
+    void schedule_job(Tpkt *packet);
 
 private:
     void worker_main();
@@ -37,8 +37,7 @@ private:
     unsigned int                P_maxIterations;
 
     size_t                      P_job_size;
-    std::vector<bundleElt*>     P_job_packet_address;
-    std::vector<bundleElt*>     P_job_decode_address;
+    std::vector<Tpkt*>          P_job_packet;
 
     std::condition_variable     P_cv_worker;
 };

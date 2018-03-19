@@ -26,7 +26,7 @@ public:
     LoaderPool(const LoaderPool&) = delete;
     LoaderPool& operator=(const LoaderPool&) = delete;
 
-    void schedule_job(bundleElt *packet_address);
+    void schedule_job(Tpkt *packet);
 
 private:
     void worker_main();
@@ -46,8 +46,7 @@ private:
     float                       P_lc;
 
     size_t                      P_job_size;
-    std::vector<bundleElt*>     P_job_packet_address;
-    std::vector<bundleElt*>     P_job_decode_address;
+    std::vector<Tpkt*>          P_job_packet;
 
     std::condition_variable     P_cv_worker;
 };

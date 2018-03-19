@@ -33,13 +33,16 @@ build: RunDecoder
 
 SOURCES := $(wildcard *.cu)
 ### OBJECTS := $(patsubst %.cu, %.o, $(SOURCES))
-OBJECTS := loader_pool.o decoder_pool.o bitEstimates.o  cnpMinSumBlock.o  cnpOptimalBlock.o  cnpOptimal.o Decoder.o \
-calcParityBits.o  cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o Encoder.o  RunDecoder.o  ReadAlistFile.o
+OBJECTS := Tpkt.o loader_pool.o decoder_pool.o bitEstimates.o   cnpOptimalBlock.o  Decoder.o \
+	calcParityBits.o  Encoder.o  RunDecoder.o  ReadAlistFile.o
 
-%.ptx: %.cu bundleElt.h loader_pool.h decoder_pool.h
+INCLUDEFILES := Tpkt.h bundleElt.h loader_pool.h decoder_pool.h
+## cnpMinSumBlock.o cnpOptimal.o cnpMinSum.o cnpOptimalNaive.o  copyBitsToCheckMatrix.o \
+
+%.ptx: %.cu $(INCLUDEFILES)
 	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -ptx -src-in-ptx -c $<
 
-%.o: %.cu bundleElt.h loader_pool.h decoder_pool.h
+%.o: %.cu $(INCLUDEFILES)
 	$(NVCC) $(NVCC_INCLUDES) $(INCLUDES) $(NVCC_FLAGS) -o $@ -c $<
 
 RunDecoder: $(OBJECTS)

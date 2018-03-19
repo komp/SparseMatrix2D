@@ -39,10 +39,10 @@ LoaderPool::~LoaderPool() {
   for (auto& t : P_threads) t.join();
 }
 
-void LoaderPool::schedule_job(bundleElt *packet_address) {
+void LoaderPool::schedule_job(Tpkt *packet) {
   std::lock_guard<std::mutex> lock(P_mutex);
 
-  P_job_packet_address.push_back(packet_address);
+  P_job_packet.push_back(packet);
   P_job_size++;
   P_cv_worker.notify_one();
 }
@@ -76,8 +76,8 @@ void LoaderPool::worker_main() {
     for (;;) {
       if (P_job_size == 0) break;
 
-      bundleElt *packet_address = P_job_packet_address.back();
-      P_job_packet_address.pop_back();
+      Tpkt *packet = P_job_packet.back();
+      P_job_packet.pop_back();
       P_job_size--;
 
       lock.unlock();
@@ -98,11 +98,11 @@ void LoaderPool::worker_main() {
         // The LDPC codes are punctured, so the r we feed to the decoder is
         // longer than the r we got from the channel. The punctured positions are filled in as zeros
         for (unsigned int j=(P_infoLeng+P_numParityBits); j<P_numBits; j++) receivedSig[j] = 0.0;
-        for (unsigned int j=0; j < P_numBits; j++ ) packet_address[j+1].s[slot] = receivedSig[j];
+        for (unsigned int j=0; j < P_numBits; j++ ) packet->receivedSigs[j].s[slot] = receivedSig[j];
       }
       lock.lock();
 
-      packet_address[0] = make_bundleElt(1.0);
+      packet->loadStamp = 1.0;
     }
   }
 }
