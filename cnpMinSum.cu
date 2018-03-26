@@ -18,10 +18,10 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
   // error: constant value is not known.
   // Since we are in a kernel function, we probably need a compile-time constant.
   // 128 should be much larger than maxBitsForCheck for any reasonable LDPC encoding.
-  bundleEltI signs[128];
-  bundleEltI signProduct;
+  bundleElt signs[128];
+  bundleElt signProduct;
   bundleElt min1, min2;
-  bundleEltI minIndex;
+  bundleElt minIndex;
   float value;
 
   unsigned int bundleIndex, bundleBase, etaIndex;
@@ -36,10 +36,10 @@ checkNodeProcessingMinSum (unsigned int numChecks, unsigned int maxBitsForCheck,
     bundleBase = bundleIndex* nChecksByBits;
     // signs[n]  == 0  ==>  positive; 1  ==>  negative
     memset(signs, 0, (maxBitsForCheck+1)*sizeof(signs[0]));
-    signProduct = make_bundleEltI(0);
+    signProduct = make_bundleElt(0);
     min1 = make_bundleElt(MAX_ETA);
     min2 = make_bundleElt(MAX_ETA);
-    minIndex = make_bundleEltI(1);
+    minIndex = make_bundleElt(1);
 
     thisRowLength = (unsigned int) ONEVAL(eta[m]);
 

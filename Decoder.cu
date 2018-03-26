@@ -70,9 +70,13 @@ void initLdpcDecoder  (H_matrix *hmat, unsigned int nBundles) {
   HANDLE_ERROR(cudaMemcpy(dev_mapCR, mapCols2Rows, nBitsByChecks * sizeof(unsigned int), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_cHat, cHat, nChecksByBits * nBundles*sizeof(bundleElt), cudaMemcpyHostToDevice));
 
-  memset(eta, 0, nChecksByBits*nBundles*sizeof(eta[0]));
-  memset(etaByBitIndex, 0, nBitsByChecks*nBundles*sizeof(etaByBitIndex[0]));
-  memset(lambdaByCheckIndex, 0, nChecksByBits*nBundles*sizeof(lambdaByCheckIndex[0]));
+  bundleElt zeroBE = make_bundleElt(0.0);
+  bundleElt twoBE = make_bundleElt(2.0);
+  for (unsigned int i=0; i < nChecksByBits*nBundles; i++) {
+    eta[i] = zeroBE;
+    lambdaByCheckIndex[i] = zeroBE;
+  }
+  for (unsigned int i=0; i < nBitsByChecks*nBundles*nBundles; i++) etaByBitIndex[i] = zeroBE;
 
   // All matrices are stored in column order.
   // For eta and lambdaByCheckIndex, each column represents a Check node.
@@ -107,6 +111,7 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
   unsigned int maxChecksPerBit = hmat->maxChecksPerBit;
   unsigned int nChecksByBits = numChecks*(maxBitsPerCheck+1);
   unsigned int nBitsByChecks = numBits*(maxChecksPerBit+1);
+  unsigned int *mapCols2Rows = hmat->mapCols2Rows;
 
   unsigned int iterCounter;
   bool allChecksPassed = false;
@@ -114,11 +119,24 @@ int ldpcDecoderWithInit (H_matrix *hmat, bundleElt *rSig, unsigned int  maxItera
   unsigned int successCount;
   unsigned int returnVal;
 
+  for (int localBit = 0; localBit < numBits; localBit++) {
+    unsigned int thisRowLength = mapCols2Rows[localBit];
+    for (int locali = 0; locali < thisRowLength; locali++) {
+      unsigned int cellIndex =  locali * numBits + localBit;
+      unsigned int oneDindex = mapCols2Rows[cellIndex];
+      for (int localBundle = 0; localBundle < nBundles; localBundle++) {
+        int bitOffset = numBits * localBundle;
+        int lambdaOffset = nChecksByBits * localBundle;
+        lambdaByCheckIndex[oneDindex + lambdaOffset] = rSig[localBit + bitOffset];
+      }
+    }
+  }
+
   HANDLE_ERROR(cudaMemcpy(dev_rSig, rSig, numBits * nBundles*sizeof(bundleElt), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_etaByBitIndex, etaByBitIndex, nBitsByChecks * nBundles*sizeof(bundleElt), cudaMemcpyHostToDevice));
   HANDLE_ERROR(cudaMemcpy(dev_eta, eta, nChecksByBits * nBundles*sizeof(bundleElt), cudaMemcpyHostToDevice));
-  copyBitsToCheckmatrix<<<numBits*nBundles, NTHREADS>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksPerBit,
-                                                        nChecksByBits, nBitsByChecks, nBundles);
+  HANDLE_ERROR(cudaMemcpy(dev_lambdaByCheckIndex, lambdaByCheckIndex, nChecksByBits * nBundles*sizeof(bundleElt), cudaMemcpyHostToDevice));
+  //  copyBitsToCheckmatrix<<<numBits*nBundles, NTHREADS>>>(dev_mapCR, dev_rSig, dev_lambdaByCheckIndex, numBits, maxChecksPerBit, nChecksByBits, nBitsByChecks, nBundles);
 
   ////////////////////////////////////////////////////////////////////////////
   // Main iteration loop

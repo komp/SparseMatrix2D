@@ -8,8 +8,8 @@ calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, 
   unsigned int tid, m;
   unsigned int thisRowLength;
 
-  bundleIndex = blockIdx.x / numChecks;
   tid = threadIdx.x + blockIdx.x * blockDim.x;
+  bundleIndex = tid / numChecks;
   m = tid % numChecks;
   if (bundleIndex < nBundles) {
     bundleBase = bundleIndex* nChecksByBits;

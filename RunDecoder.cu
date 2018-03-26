@@ -118,7 +118,7 @@ int main (int argc, char **argv) {
 
   unsigned int successes = 0;
   unsigned int iterationSum = 0;
-  int totalPackets;
+  int packetsPerCycle, cycle, totalPackets;
 
   int itersHistory[HISTORY_LENGTH+1];
   int iters;
@@ -142,39 +142,33 @@ int main (int argc, char **argv) {
 
   initLdpcDecoder (hmat, nBundles);
 
-  FILE *fd;
-  fd = fopen("./evenodd1408.encoded" , "r");
-  if (fd == NULL) {
-    printf("Error opening file %s\n", "./evenodd1408.encoded");
-    return(-1);
-  }
-  for (int i=0; i< numBits; i++) fscanf(fd, "%d", &codeWord[i]);
-  fclose(fd);
-
-  for (unsigned int i=1; i<= how_many; i++) {
+  packetsPerCycle = SLOTS_PER_ELT * nBundles;
+  totalPackets = 0;
+  cycle = 0;
+  while  (totalPackets < how_many) {
+    cycle++;
     startTime = clock::now();
-    for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
-      for (unsigned int j=0; j < infoLeng; j++) {
-        infoWord[j] = (0.5 >= rDist(generator))? 1:0;
-      }
-      //edk  when commented, this implies we are using a "standard" infoWord
-      //edk  of alternating 0/1.
-      ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+    for (unsigned int bundleIndex=0; bundleIndex < nBundles; bundleIndex++) {
+      int bundleBase = bundleIndex * numBits;
+      for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
+        for (unsigned int j=0; j < infoLeng; j++) infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+        ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
 
-      // Modulate the codeWord, and add noise
-      for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
-        s     = 2*float(codeWord[j]) - 1;
-        // AWGN channel
-        noise = sqrt(sigma2) * normDist(generator);
-        // When r is scaled by Lc it results in precisely scaled LLRs
-        receivedSig[j]  = lc*(s + noise);
-      }
-      // The LDPC codes are punctured, so the r we feed to the decoder is
-      // longer than the r we got from the channel. The punctured positions are filled in as zeros
-      for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
+        // Modulate the codeWord, and add noise
+        for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
+          s     = 2*float(codeWord[j]) - 1;
+          // AWGN channel
+          noise = sqrt(sigma2) * normDist(generator);
+          // When r is scaled by Lc it results in precisely scaled LLRs
+          receivedSig[j]  = lc*(s + noise);
+        }
+        // The LDPC codes are punctured, so the r we feed to the decoder is
+        // longer than the r we got from the channel. The punctured positions are filled in as zeros
+        for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
 
-      for (unsigned int j=0; j < numBits; j++ ) receivedBundle[j].s[slot] = receivedSig[j];
+        for (unsigned int j=0; j < numBits; j++ ) receivedBundle[bundleBase + j].s[slot] = receivedSig[j];
       }
+    }
     endTime = clock::now();
     oneTime = endTime - startTime;
     allTimeE = allTimeE + oneTime;
@@ -186,22 +180,25 @@ int main (int argc, char **argv) {
     oneTime = endTime - startTime;
     allTime = allTime + oneTime;
 
+    totalPackets += packetsPerCycle;
     successes += iters >> 8;
     iters = iters & 0xff ;
     iterationSum = iterationSum + iters;
-    if ( i <= HISTORY_LENGTH) { itersHistory[i] = iters;}
-    if (i % 1000 == 0) printf(" %i Successes out of %i inputs (%i msec).\n",
-                              successes, i, std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count());
+    if ( cycle <= HISTORY_LENGTH) { itersHistory[cycle] = iters;}
+    if (totalPackets % 1000 == 0)
+      printf(" %i Successes out of %i packets (%i msec).\n",
+             successes, totalPackets, std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count());
   }
 
-  totalPackets = nBundles * SLOTS_PER_ELT * how_many;
   printf("%i msec to decode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count(),totalPackets);
   printf("%i msec to encode %i packets.\n",std::chrono::duration_cast<std::chrono::milliseconds>(allTimeE).count(),totalPackets);
   printf(" %i Successes out of %i packets. (%.2f%%)\n", successes, totalPackets, 100.0 * successes/ totalPackets);
   printf("Information rate: %.2f Mbps\n", successes * infoLeng / (1000.0 * std::chrono::duration_cast<std::chrono::milliseconds>(allTime).count()));
-  printf(" %i cumulative iterations, or about %.1f per packet.\n", iterationSum, iterationSum/(float)how_many);
+  // Note,  each iteration carries SLOTS_PER_ELT * nBundles packets, so make adjustments here.
+  int allIters = iterationSum * packetsPerCycle;
+  printf(" %i cumulative iterations, or about %.1f per packet.\n", allIters, allIters/(float)how_many);
   printf("Number of iterations for the first few packets:  ");
-  for (unsigned int i=1; i<= MIN(how_many, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
+  for (unsigned int i=1; i<= MIN(cycle, HISTORY_LENGTH); i++) {printf(" %i", itersHistory[i]);}
   printf ("\n");
 
   cudaDeviceReset();
