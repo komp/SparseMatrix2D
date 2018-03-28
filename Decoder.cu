@@ -9,8 +9,7 @@
 #include "GPUincludes.h"
 #include "LDPC.h"
 
-#define NTHREADS   64
-#define CNP_THREADS   20  // checkNodeProcessing threads
+#define NTHREADS   32
 
 int ldpcDecoder (H_matrix *hmat, unsigned int  maxIterations, bundleElt *rSig, bundleElt *decodedPkt,
                  bundleElt *dev_rSig, bundleElt *dev_estimate, bundleElt *dev_eta, bundleElt *dev_etaByBitIndex,
@@ -62,25 +61,27 @@ int ldpcDecoder (H_matrix *hmat, unsigned int  maxIterations, bundleElt *rSig, b
     ////////////////////////////////////////////////////////////////////////////
 
     for(iterCounter=1;iterCounter<=maxIterations;iterCounter++) {
-      checkNodeProcessingOptimalBlock <<<numChecks, CNP_THREADS>>>
+      checkNodeProcessingOptimalBlock <<<numChecks, maxBitsPerCheck >>>
         (numChecks, maxBitsPerCheck, dev_lambdaByCheckIndex, dev_eta, dev_mapRC, dev_etaByBitIndex);
 
       bitEstimates<<<numBits/NTHREADS+1,NTHREADS>>>
         (dev_rSig, dev_estimate, dev_etaByBitIndex, dev_lambdaByCheckIndex, dev_mapCR, numBits,maxChecksPerBit);
 
-      calcParityBits <<<numChecks/NTHREADS+1, NTHREADS>>>
-        (dev_lambdaByCheckIndex, dev_parityBits, numChecks, maxBitsPerCheck);
+      if (iterCounter > 15) {
+        calcParityBits <<<numChecks/NTHREADS+1, NTHREADS>>>
+          (dev_lambdaByCheckIndex, dev_parityBits, numChecks, maxBitsPerCheck);
 
-      allChecksPassed = true;
+        allChecksPassed = true;
 
-      //  The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
-      HANDLE_ERROR(cudaMemcpy(parityBits, dev_parityBits, numChecks*sizeof(bundleElt),cudaMemcpyDeviceToHost));
-      paritySum = zeroBE;
-      for (unsigned int check=0; check < numChecks; check++) {
-        for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)parityBits[check].s[slot] != 0) allChecksPassed = false;
-        if (! allChecksPassed) break;
+        //  The cpu is slightly faster than GPU DeviceReduce  to determine if any paritycheck is non-zero.
+        HANDLE_ERROR(cudaMemcpy(parityBits, dev_parityBits, numChecks*sizeof(bundleElt),cudaMemcpyDeviceToHost));
+        paritySum = zeroBE;
+        for (unsigned int check=0; check < numChecks; check++) {
+          for (unsigned int slot=0; slot< SLOTS_PER_ELT; slot++) if ((int)parityBits[check].s[slot] != 0) allChecksPassed = false;
+          if (! allChecksPassed) break;
+        }
+        if (allChecksPassed) break;
       }
-      if (allChecksPassed) break;
     }
     if (iterCounter < maxIterations) {
       successCount = SLOTS_PER_ELT;
