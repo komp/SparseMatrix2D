@@ -68,6 +68,7 @@ int main (int argc, char **argv) {
   // When r is scaled by Lc it results in precisely scaled LLRs
   lc = 4/No;
 
+  // Alist file contains all the information about an LDPC code in textual format
   status = ReadAlistFile(hmat, H_Alist_File);
   if ( status != 0) {
     printf ("Unable to read alist file: %s\n", H_Alist_File);
@@ -76,6 +77,7 @@ int main (int argc, char **argv) {
   numBits = hmat->numBits;
   numChecks = hmat->numChecks;
 
+  // W_ROW_ROM file contains information for encoding an LDPC code
   src = fopen(wROM_File, "r");
   if (src == NULL) {
     errnum = errno;
@@ -130,6 +132,15 @@ int main (int argc, char **argv) {
   codeWord = (unsigned int *)malloc((infoLeng + numParityBits) * sizeof(unsigned int));
   receivedSig = (float *)malloc(numBits * sizeof(float));
 
+
+  // Here, we encode a number (nBundles) of packet bundles with random information, and add noise.
+  // This is an approximation of the signals we expect to receive at the decoder --our real focus.
+  // With this approach, we cannot make good estimates for the decoder accuracy since we reuse a
+  // fixed, relatively small signals.  So, this is for evaluating the performance (timing) of the
+  // decoder once deployed.
+  // For evalautation of the decoder's accuracy, simply change "fast_loader.h" with "loader_pool.h"
+  // This uses the decoder pool unalterated, but actually computes a fresh, random packet
+  // on each request.
   int nBundles = 1000;
   int bundleStart;
   bundle = (bundleElt*) malloc(numBits * sizeof(bundleElt));
@@ -159,23 +170,39 @@ int main (int argc, char **argv) {
   startTime = clock::now();
   allTime = startTime - startTime;
 
+  //  receivedSigs and decodedSigs are the circular buffers used to accept
+  //  inputs signals as they arrive (and the corresponding decoded packets).
+  //  These may not be processed in a linear order,  packet n+1 may finish decoding
+  //  before packet n (different number of iterations required);
+  //  so the software is responsible for delivering the decoded packets in order received
+  //  to some output stream (which is not currently implemented).
   sigBufferLength = 2 * numThreads;
   receivedSigs = (bundleElt*) malloc(sigBufferLength * numBits * sizeof(bundleElt));
   decodedSigs  = (bundleElt*) malloc(sigBufferLength * numBits * sizeof(bundleElt));
 
+  // The receivedSigs and corresponding decodedSigs are kept aligned using a
+  // very simple, Tpkt, structure, which also carries a state member indicating
+  // how the pair is currently being utilized.
+  // We never permit, loading and decoding to overlap.
   std::vector<Tpkt> buffer;
   buffer.reserve(sigBufferLength);
 
+  // A pool of decoders is created and re-used.
   DecoderPool* decoders = new DecoderPool(hmat, maxIterations, numThreads);
+  //  In a similar manner, there are pool of encoders for generating fresh input signals.
   //  LoaderPool* pktLoader = new LoaderPool(infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
   FastLoader* pktLoader = new FastLoader(preloads, nBundles, numBits);
 
+
+  // Start by asking by asking the loader to fill the input ring.
+  // We do not wait for these to complete, we just ask (schedule) the requests,
+  // telling the encoder where (&receivedSigs[sigIndex]) to put each signal.
   for (unsigned int i=0; i< sigBufferLength; i++) {
     sigIndex = i* numBits;
     buffer.emplace_back(&receivedSigs[sigIndex],  & decodedSigs[sigIndex]);
     buffer[i].state = LOADING;
     pktLoader->schedule_job(&buffer[i]);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   unsigned int pktsDecoded = 0;
@@ -183,6 +210,13 @@ int main (int argc, char **argv) {
 
   cudaProfilerStart();
 
+  // Here is the loop that decodes the number of packets specified.
+  // For each buffer entry;
+  // when encoding is complete, we are ready to begin (schedule) decoding
+  // of this packet.
+  // when decoding is complete
+  // (and the decoded packet has been delivered to the output stream, eventually)
+  // we are ready to begin (schedule) load/encode another input signal.
   while (pktsDecoded < how_many) {
     for (unsigned int i=0; i< sigBufferLength; i++) {
       switch(buffer[i].state) {
