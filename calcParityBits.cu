@@ -1,5 +1,8 @@
 #include "bundleElt.h"
 
+
+// Inlining the SLOT loops made no difference.
+
 __global__ void
 calcParityBits (bundleElt *cHat, bundleElt *parityBits, unsigned int numChecks, unsigned int maxBitsForCheck) {
 
