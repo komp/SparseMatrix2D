@@ -3,13 +3,16 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
-
+#include <thread>
 #include <chrono>
+
+#include <cuda_profiler_api.h>
 
 #include "GPUincludes.h"
 #include "LDPC.h"
 
-#include "loader_pool.h"
+//#include "loader_pool.h"
+#include "fast_loader.h"
 #include "decoder_pool.h"
 
 #define HISTORY_LENGTH  20
@@ -110,6 +113,48 @@ int main (int argc, char **argv) {
   unsigned int iterationSum = 0;
   int iters;
 
+  /* noisy signal generation */
+  unsigned int  seed = 163331;
+  std::mt19937 generator(seed); //Standard mersenne_twister_engine
+  std::uniform_real_distribution<> rDist(0, 1);
+
+  std::normal_distribution<float> normDist(0.0, 1.0);
+  unsigned int* infoWord;
+  unsigned int* codeWord;
+  float s, noise;
+  float* receivedSig;
+  bundleElt* bundle;
+  bundleElt* preloads;
+
+  infoWord = (unsigned int *)malloc(infoLeng * sizeof(unsigned int));
+  codeWord = (unsigned int *)malloc((infoLeng + numParityBits) * sizeof(unsigned int));
+  receivedSig = (float *)malloc(numBits * sizeof(float));
+
+  int nBundles = 1000;
+  int bundleStart;
+  bundle = (bundleElt*) malloc(numBits * sizeof(bundleElt));
+  preloads = (bundleElt*) malloc(nBundles * numBits * sizeof(bundleElt));
+
+  for (int bundleIndex = 0; bundleIndex < nBundles; bundleIndex++) {
+    bundleStart = bundleIndex * numBits;
+    for (unsigned int slot=0; slot < SLOTS_PER_ELT; slot++) {
+      for (unsigned int j=0; j < infoLeng; j++) infoWord[j] = (0.5 >= rDist(generator))? 1:0;
+      ldpcEncoder(infoWord, W_ROW_ROM, infoLeng, numRowsW, numColsW, shiftRegLength, codeWord);
+
+      for (unsigned int j=0; j < (infoLeng+numParityBits) ; j++) {
+        s     = 2*float(codeWord[j]) - 1;
+        noise = sqrt(sigma2) * normDist(generator);
+        receivedSig[j]  = lc*(s + noise);
+      }
+      // The LDPC codes are punctured, so the r we feed to the decoder is
+      // longer than the r we got from the channel. The punctured positions are filled in as zeros
+      for (unsigned int j=(infoLeng+numParityBits); j<numBits; j++) receivedSig[j] = 0.0;
+      for (unsigned int j=0; j < numBits; j++ ) bundle[j].s[slot] = receivedSig[j];
+    }
+    for (unsigned int j=0; j < numBits; j++) preloads[bundleStart+j] = bundle[j];
+  }
+  printf ("Encoding complete.\n");
+
   // An ugly way to intialize variable allTime (accumulated interesting time) to zero.
   startTime = clock::now();
   allTime = startTime - startTime;
@@ -122,21 +167,24 @@ int main (int argc, char **argv) {
   buffer.reserve(sigBufferLength);
 
   DecoderPool* decoders = new DecoderPool(hmat, maxIterations, numThreads);
-  LoaderPool* pktLoader = new LoaderPool(infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
+  //  LoaderPool* pktLoader = new LoaderPool(infoLeng, numBits, numParityBits, W_ROW_ROM, numRowsW, numColsW, shiftRegLength, sigma2, lc);
+  FastLoader* pktLoader = new FastLoader(preloads, nBundles, numBits);
 
   for (unsigned int i=0; i< sigBufferLength; i++) {
     sigIndex = i* numBits;
     buffer.emplace_back(&receivedSigs[sigIndex],  & decodedSigs[sigIndex]);
     buffer[i].state = LOADING;
     pktLoader->schedule_job(&buffer[i]);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   unsigned int pktsDecoded = 0;
   startTime = clock::now();
 
+  cudaProfilerStart();
+
   while (pktsDecoded < how_many) {
     for (unsigned int i=0; i< sigBufferLength; i++) {
-      sigIndex = i * (numBits+1);
       switch(buffer[i].state) {
       case LOADING :
         if (buffer[i].loadStamp != 0 ) {
@@ -164,6 +212,8 @@ int main (int argc, char **argv) {
       }
     }
   }
+  cudaProfilerStop();
+
   endTime = clock::now();
   allTime = endTime - startTime;
 
